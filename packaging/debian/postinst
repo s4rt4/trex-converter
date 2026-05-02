@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+command -v ffmpeg >/dev/null 2>&1 || echo "ffmpeg is not installed"
+command -v libreoffice >/dev/null 2>&1 || echo "libreoffice is not installed"
+command -v tesseract >/dev/null 2>&1 || echo "tesseract is not installed"
+
+exit 0

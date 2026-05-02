@@ -1,0 +1,14 @@
+Source: t-rex-converter
+Section: utils
+Priority: optional
+Maintainer: T-Rex Converter Maintainers <maintainers@example.invalid>
+Build-Depends: debhelper-compat (= 13), dh-python, python3-all, python3-setuptools
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: t-rex-converter
+Architecture: all
+Depends: ${python3:Depends}, ${misc:Depends}, python3-pyside6.qtwidgets, ffmpeg, imagemagick, libreoffice, qpdf, tesseract-ocr
+Description: Native local file converter GUI
+ T-Rex Converter converts media, images, documents, and PDFs using local
+ system engines.
