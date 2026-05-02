@@ -9,7 +9,7 @@ from app.core.task import Task
 from app.data.database import TaskRepository
 from app.engines.imagemagick_engine import IMAGE_FORMATS
 from app.ui.conversion_page import ConversionPage, ConversionPageConfig
-from app.ui.icons import ICON_SIZE, accent_icon, icon, surface_icon
+from app.ui.icons import ICON_SIZE, accent_icon, app_icon, icon, surface_icon
 from app.ui.theme import (
     BRAND_ACCENT,
     BRAND_DARK,
@@ -79,7 +79,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("T-Rex Converter")
-        self.setWindowIcon(accent_icon("fa5s.exchange-alt"))
+        self.setWindowIcon(app_icon())
         self.resize(1120, 720)
         self.registry = ConversionRegistry()
         self.queue = TaskQueue(

@@ -6,6 +6,14 @@ from pathlib import Path
 APP_NAME = "t-rex-converter"
 
 
+def project_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def asset_path(*parts: str) -> Path:
+    return project_root() / "assets" / Path(*parts)
+
+
 def config_dir() -> Path:
     return Path.home() / ".config" / APP_NAME
 

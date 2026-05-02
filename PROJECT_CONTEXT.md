@@ -27,6 +27,7 @@ Sudah ada:
 - Stub engine untuk LibreOffice, PDF, dan OCR.
 - UI PySide6 dengan sidebar.
 - Icon pack `qtawesome`.
+- App logo SVG and hicolor PNG icon assets.
 - Test suite pytest.
 
 ## UI Direction
@@ -75,6 +76,13 @@ Icon pack: `qtawesome`.
 Helper icon ada di:
 - `app/ui/icons.py`
 
+App logo:
+- Source SVG: `assets/trex-logo.svg`
+- Generated hicolor assets: `assets/icons/hicolor/...`
+- Regeneration script: `scripts/generate-icons.sh`
+- Debian desktop launcher: `packaging/t-rex-converter.desktop`
+- Debian install map: `packaging/debian/install`
+
 Icon sudah dipakai di:
 - Sidebar menu.
 - Window icon.
@@ -100,6 +108,8 @@ Icon sudah dipakai di:
 - `app/data/database.py`: SQLite task repository.
 - `app/engines/ffmpeg_engine.py`: real FFmpeg engine.
 - `app/engines/imagemagick_engine.py`: real ImageMagick engine and image format list.
+- `assets/trex-logo.svg`: source app logo.
+- `assets/icons/hicolor/`: generated app icons for desktop packaging.
 
 ## Run
 

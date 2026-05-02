@@ -16,6 +16,7 @@ Implemented:
 - ImageMagick engine dasar via `asyncio.create_subprocess_exec`, dengan opsi `resize`, `quality`, dan `strip`.
 - SQLite task repository untuk history dan resume pending/running task.
 - UI skeleton terhubung ke queue: progress bar per task, tombol cancel dan retry.
+- App logo SVG plus hicolor PNG assets untuk integrasi desktop Debian.
 - Tests untuk core queue, registry, dependency, dan base engine behavior.
 
 ## Development
@@ -37,6 +38,12 @@ Atau:
 
 ```bash
 python -m app.main
+```
+
+Regenerate PNG icon assets from the SVG logo:
+
+```bash
+scripts/generate-icons.sh
 ```
 
 ## Runtime Dependencies

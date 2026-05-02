@@ -1,0 +1,8 @@
+assets/icons/hicolor/scalable/apps/t-rex-converter.svg usr/share/icons/hicolor/scalable/apps/
+assets/icons/hicolor/16x16/apps/t-rex-converter.png usr/share/icons/hicolor/16x16/apps/
+assets/icons/hicolor/32x32/apps/t-rex-converter.png usr/share/icons/hicolor/32x32/apps/
+assets/icons/hicolor/48x48/apps/t-rex-converter.png usr/share/icons/hicolor/48x48/apps/
+assets/icons/hicolor/64x64/apps/t-rex-converter.png usr/share/icons/hicolor/64x64/apps/
+assets/icons/hicolor/128x128/apps/t-rex-converter.png usr/share/icons/hicolor/128x128/apps/
+assets/icons/hicolor/256x256/apps/t-rex-converter.png usr/share/icons/hicolor/256x256/apps/
+packaging/t-rex-converter.desktop usr/share/applications/
