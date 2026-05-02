@@ -19,9 +19,11 @@ from app.ui.theme import (
     BRAND_SURFACE_SOFT,
     BRAND_TEXT,
 )
+from app.utils.paths import asset_path
 
 try:
     from PySide6.QtCore import QTimer
+    from PySide6.QtGui import QPixmap
     from PySide6.QtWidgets import (
         QFrame,
         QHBoxLayout,
@@ -36,7 +38,7 @@ try:
         QWidget,
     )
 except ImportError:  # pragma: no cover
-    QTimer = None
+    QTimer = QPixmap = None
     QFrame = QHBoxLayout = QLabel = QListWidget = QListWidgetItem = QMainWindow = QMessageBox = QPushButton = QStackedWidget = QVBoxLayout = QWidget = None
 
 
@@ -129,9 +131,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(14, 18, 14, 14)
         layout.setSpacing(12)
 
-        title = QLabel("T-Rex Converter", sidebar)
-        title.setObjectName("SidebarTitle")
-        layout.addWidget(title)
+        layout.addWidget(self._build_sidebar_brand(sidebar))
 
         self.nav = QListWidget(sidebar)
         self.nav.setObjectName("SidebarNav")
@@ -148,6 +148,25 @@ class MainWindow(QMainWindow):
 
         self.nav.setCurrentRow(0)
         return sidebar
+
+    def _build_sidebar_brand(self, parent: QWidget) -> QWidget:
+        brand = QWidget(parent)
+        brand.setObjectName("SidebarBrand")
+        layout = QHBoxLayout(brand)
+        layout.setContentsMargins(0, 0, 0, 10)
+        layout.setSpacing(10)
+
+        logo = QLabel(brand)
+        logo.setObjectName("SidebarLogo")
+        pixmap = QPixmap(str(asset_path("trex-logo.svg")))
+        if not pixmap.isNull():
+            logo.setPixmap(pixmap.scaled(34, 34))
+        layout.addWidget(logo)
+
+        title = QLabel("T-Rex Converter", brand)
+        title.setObjectName("SidebarTitle")
+        layout.addWidget(title, 1)
+        return brand
 
     def stack_index_changed(self, row: int) -> None:
         if row >= 0:
@@ -197,7 +216,13 @@ class MainWindow(QMainWindow):
                 color: $BRAND_ACCENT;
                 font-size: 18px;
                 font-weight: 700;
-                padding: 4px 2px 10px 2px;
+                padding: 0;
+            }
+            #SidebarLogo {
+                min-width: 34px;
+                min-height: 34px;
+                max-width: 34px;
+                max-height: 34px;
             }
             #SidebarNav {
                 background: transparent;
