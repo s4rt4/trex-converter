@@ -16,8 +16,8 @@ try:
         QCheckBox,
         QComboBox,
         QFileDialog,
-        QFormLayout,
         QFrame,
+        QGridLayout,
         QHBoxLayout,
         QLabel,
         QLineEdit,
@@ -25,13 +25,14 @@ try:
         QMessageBox,
         QPushButton,
         QSlider,
+        QTabWidget,
         QToolButton,
         QVBoxLayout,
         QWidget,
     )
 except ImportError:  # pragma: no cover
     Qt = None
-    QCheckBox = QComboBox = QFileDialog = QFormLayout = QFrame = QHBoxLayout = QLabel = QLineEdit = QListView = QMessageBox = QPushButton = QSlider = QToolButton = QVBoxLayout = QWidget = None
+    QCheckBox = QComboBox = QFileDialog = QFrame = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QMessageBox = QPushButton = QSlider = QTabWidget = QToolButton = QVBoxLayout = QWidget = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +45,7 @@ class ConversionPageConfig:
     show_quality: bool = False
     show_resize: bool = False
     show_bitrate: bool = False
+    extra_options_factory: Callable[[QWidget], QWidget] | None = None
 
 
 class ConversionPage(QWidget):
@@ -66,33 +68,54 @@ class ConversionPage(QWidget):
         self.resize_input: QLineEdit | None = None
         self.bitrate_input: QLineEdit | None = None
         self.strip_input: QCheckBox | None = None
+        self.extra_options_widget: QWidget | None = None
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(18, 18, 18, 18)
-        root.setSpacing(14)
+        root.setContentsMargins(16, 14, 16, 14)
+        root.setSpacing(10)
 
         title = QLabel(config.title, self)
         title.setObjectName("PageTitle")
         root.addWidget(title)
 
-        form_shell = QFrame(self)
+        self.page_tabs = QTabWidget(self)
+        self.page_tabs.setObjectName("PageTabs")
+        self.page_tabs.setDocumentMode(True)
+        root.addWidget(self.page_tabs, 1)
+
+        convert_tab = QWidget(self.page_tabs)
+        convert_layout = QVBoxLayout(convert_tab)
+        convert_layout.setContentsMargins(0, 18, 0, 0)
+        convert_layout.setSpacing(12)
+
+        form_shell = QFrame(convert_tab)
         form_shell.setObjectName("ToolPanel")
-        form = QFormLayout(form_shell)
-        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form = QGridLayout(form_shell)
+        form.setContentsMargins(12, 10, 12, 10)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(8)
+        form.setColumnMinimumWidth(0, 80)
+        form.setColumnStretch(1, 1)
 
         input_row = QHBoxLayout()
-        self.input_display = QLineEdit(self)
+        input_row.setSpacing(10)
+        self.input_display = QLineEdit(form_shell)
         self.input_display.setReadOnly(True)
-        browse_button = QPushButton("Browse", self)
+        browse_button = QPushButton("Browse", form_shell)
         browse_button.setIcon(surface_icon("fa5s.folder-open"))
         browse_button.setIconSize(ICON_SIZE)
         browse_button.clicked.connect(self._choose_input)
-        input_row.addWidget(self.input_display)
+        input_row.addWidget(self.input_display, 1)
         input_row.addWidget(browse_button)
-        form.addRow("Input", input_row)
+        row = 0
+        form.addWidget(_field_label("Input", form_shell), row, 0)
+        form.addLayout(input_row, row, 1)
+        row += 1
 
         output_format_row = QHBoxLayout()
-        output_format_row.setSpacing(0)
+        output_format_row.setSpacing(8)
+        format_combo_row = QHBoxLayout()
+        format_combo_row.setSpacing(0)
         self.output_combo = QComboBox(form_shell)
         self.output_combo.setObjectName("OutputFormatCombo")
         self.output_combo.setView(QListView(self.output_combo))
@@ -104,22 +127,34 @@ class ConversionPage(QWidget):
         output_format_button.setIconSize(ICON_SIZE)
         output_format_button.setToolTip("Show output formats")
         output_format_button.clicked.connect(self.output_combo.showPopup)
-        output_format_row.addWidget(self.output_combo, 1)
-        output_format_row.addWidget(output_format_button)
-        form.addRow("Output format", output_format_row)
+        format_combo_row.addWidget(self.output_combo, 1)
+        format_combo_row.addWidget(output_format_button)
+        select_location_button = QPushButton("Select Location", form_shell)
+        select_location_button.setIcon(surface_icon("fa5s.save"))
+        select_location_button.setIconSize(ICON_SIZE)
+        select_location_button.clicked.connect(self._choose_output)
+        output_format_row.addLayout(format_combo_row, 1)
+        output_format_row.addWidget(select_location_button)
+        form.addWidget(_field_label("Output format", form_shell), row, 0)
+        form.addLayout(output_format_row, row, 1)
+        row += 1
+
+        if config.show_bitrate:
+            bitrate_row = QHBoxLayout()
+            bitrate_row.setSpacing(12)
+            self.bitrate_input = QLineEdit(form_shell)
+            self.bitrate_input.setPlaceholderText("192k")
+            bitrate_row.addWidget(self.bitrate_input)
+            form.addWidget(_field_label("Audio bitrate", form_shell), row, 0)
+            form.addLayout(bitrate_row, row, 1)
+            row += 1
 
         output_row = QHBoxLayout()
-        self.output_display = QLineEdit(self)
-        output_button = QPushButton("Select Location", self)
-        output_button.setIcon(surface_icon("fa5s.save"))
-        output_button.setIconSize(ICON_SIZE)
-        output_button.clicked.connect(self._choose_output)
-        output_row.addWidget(self.output_display)
-        output_row.addWidget(output_button)
-        form.addRow("Output", output_row)
+        output_row.setSpacing(8)
+        self.output_display = QLineEdit(form_shell)
+        output_row.addWidget(self.output_display, 1)
 
         if config.show_quality:
-            quality_row = QHBoxLayout()
             self.quality_input = QSlider(Qt.Orientation.Horizontal, form_shell)
             self.quality_input.setObjectName("QualitySlider")
             self.quality_input.setRange(1, 100)
@@ -129,36 +164,53 @@ class ConversionPage(QWidget):
             self.quality_input.valueChanged.connect(
                 lambda value: self.quality_value_label.setText(str(value))
             )
-            quality_row.addWidget(self.quality_input, 1)
-            quality_row.addWidget(self.quality_value_label)
-            form.addRow("Quality", quality_row)
+            output_row.addWidget(_field_label("Quality", form_shell))
+            output_row.addWidget(self.quality_input, 1)
+            output_row.addWidget(self.quality_value_label)
+
+        form.addWidget(_field_label("Output", form_shell), row, 0)
+        form.addLayout(output_row, row, 1)
+        row += 1
 
         if config.show_resize:
             self.resize_input = QLineEdit(form_shell)
             self.resize_input.setPlaceholderText("1280x1280>")
-            form.addRow("Resize", self.resize_input)
+            form.addWidget(_field_label("Resize", form_shell), row, 0)
+            form.addWidget(self.resize_input, row, 1)
+            row += 1
 
-        if config.show_bitrate:
-            self.bitrate_input = QLineEdit(form_shell)
-            self.bitrate_input.setPlaceholderText("192k")
-            form.addRow("Audio bitrate", self.bitrate_input)
-
+        action_row = QHBoxLayout()
+        action_row.setSpacing(10)
+        action_row.addStretch(1)
         if config.show_quality or config.show_resize:
             self.strip_input = QCheckBox("Remove metadata", form_shell)
             self.strip_input.setChecked(True)
-            form.addRow("", self.strip_input)
-
-        enqueue_button = QPushButton("Add to Queue", self)
+            action_row.addWidget(self.strip_input)
+        enqueue_button = QPushButton("Add to Queue", form_shell)
         enqueue_button.setIcon(surface_icon("fa5s.plus-circle"))
         enqueue_button.setIconSize(ICON_SIZE)
         enqueue_button.clicked.connect(self._enqueue)
-        form.addRow("", enqueue_button)
+        action_row.addWidget(enqueue_button)
+        form.addLayout(action_row, row, 0, 1, 2)
 
-        root.addWidget(form_shell)
+        convert_layout.addWidget(form_shell)
 
-        self.queue_panel = QueuePanel(self)
+        if config.extra_options_factory is not None:
+            extras = config.extra_options_factory(convert_tab)
+            self.extra_options_widget = extras
+            convert_layout.addWidget(extras)
+
+        convert_layout.addStretch(1)
+        self.page_tabs.addTab(convert_tab, "Convert")
+
+        queue_tab = QWidget(self.page_tabs)
+        queue_layout = QVBoxLayout(queue_tab)
+        queue_layout.setContentsMargins(0, 18, 0, 0)
+        queue_layout.setSpacing(0)
+        self.queue_panel = QueuePanel(queue_tab)
         self.queue_panel.set_handlers(on_cancel, on_retry)
-        root.addWidget(self.queue_panel, 1)
+        queue_layout.addWidget(self.queue_panel, 1)
+        self.page_tabs.addTab(queue_tab, "Queue")
 
     def set_tasks(self, tasks: list[Task]) -> None:
         self.queue_panel.set_tasks([task for task in tasks if self._matches(task)])
@@ -241,10 +293,18 @@ class ConversionPage(QWidget):
             options["strip"] = self.strip_input.isChecked()
         if self.config.show_bitrate and self.bitrate_input is not None and self.bitrate_input.text().strip():
             options["bitrate"] = self.bitrate_input.text().strip()
+        if self.extra_options_widget is not None:
+            collector = getattr(self.extra_options_widget, "collect_options", None)
+            if callable(collector):
+                options.update(collector())
+        options["category"] = self.config.kind
         return options
 
     def _matches(self, task: Task) -> bool:
-        return task.format_in in self.config.input_formats or task.engine == self.config.engine_name
+        category = task.options.get("category")
+        if category:
+            return category == self.config.kind
+        return task.engine == self.config.engine_name
 
     def _output_belongs_to_page(self, output: str) -> bool:
         if self.config.kind == "image":
@@ -267,6 +327,12 @@ def _get_open_file_name(parent: QWidget, title: str, file_filter: str) -> str:
         return ""
     selected = dialog.selectedFiles()
     return selected[0] if selected else ""
+
+
+def _field_label(text: str, parent: QWidget) -> QLabel:
+    label = QLabel(text, parent)
+    label.setObjectName("FieldLabel")
+    return label
 
 
 def _get_save_file_name(parent: QWidget, title: str, initial_path: str) -> str:

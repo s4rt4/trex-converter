@@ -28,6 +28,20 @@ SUPPORTED_PAIRS = {
     if format_in != format_out
 }
 
+VALID_GRAVITIES = {
+    "northwest",
+    "north",
+    "northeast",
+    "west",
+    "center",
+    "east",
+    "southwest",
+    "south",
+    "southeast",
+}
+VALID_ASPECTS = {"1:1", "4:5", "5:4", "3:2", "2:3", "16:9", "9:16", "4:3", "3:4"}
+ICO_AUTO_RESIZE = "256,128,64,48,32,16"
+
 
 class ImageMagickEngine(BaseEngine):
     name = "imagemagick"
@@ -84,22 +98,102 @@ class ImageMagickEngine(BaseEngine):
 
     def _build_command(self, task: Task) -> list[str]:
         binary = _imagemagick_binary()
-        command = [binary]
-        if binary == "magick":
-            command.append(str(task.input_path))
-        else:
-            command.append(str(task.input_path))
+        options = task.options
+        command: list[str] = [binary]
 
-        resize = task.options.get("resize")
-        if resize:
-            command.extend(["-resize", str(resize)])
+        density = _int_option(options.get("density"))
+        if density and density > 0:
+            command.extend(["-density", str(density)])
 
-        quality = task.options.get("quality")
+        command.append(str(task.input_path))
+
+        rotate = _int_option(options.get("rotate"))
+        if rotate:
+            command.extend(["-rotate", str(rotate)])
+
+        if options.get("flip"):
+            command.append("-flip")
+        if options.get("flop"):
+            command.append("-flop")
+
+        if options.get("auto_trim"):
+            command.extend(["-trim", "+repage"])
+
+        crop_aspect = options.get("crop_aspect")
+        if crop_aspect and crop_aspect in VALID_ASPECTS:
+            command.extend(["-gravity", "center", "-crop", crop_aspect, "+repage"])
+
+        crop = options.get("crop")
+        if crop:
+            command.extend(["-crop", str(crop), "+repage"])
+
+        resize_value = _resolve_resize(options)
+        if resize_value:
+            command.extend(["-resize", resize_value])
+
+        if options.get("grayscale"):
+            command.extend(["-colorspace", "Gray"])
+
+        sepia = _int_option(options.get("sepia"))
+        if sepia and sepia > 0:
+            command.extend(["-sepia-tone", f"{sepia}%"])
+
+        if options.get("negate"):
+            command.append("-negate")
+        if options.get("normalize"):
+            command.append("-normalize")
+
+        brightness = _int_option(options.get("brightness")) or 0
+        contrast = _int_option(options.get("contrast")) or 0
+        if brightness or contrast:
+            command.extend(["-brightness-contrast", f"{brightness}x{contrast}"])
+
+        gamma = _float_option(options.get("gamma"))
+        if gamma is not None and gamma > 0 and gamma != 1.0:
+            command.extend(["-gamma", _format_float(gamma)])
+
+        blur = _float_option(options.get("blur"))
+        if blur is not None and blur > 0:
+            command.extend(["-blur", f"0x{_format_float(blur)}"])
+
+        sharpen = _float_option(options.get("sharpen"))
+        if sharpen is not None and sharpen > 0:
+            command.extend(["-sharpen", f"0x{_format_float(sharpen)}"])
+
+        if options.get("denoise"):
+            command.append("-enhance")
+
+        if options.get("vignette"):
+            command.extend(["-background", "black", "-vignette", "0x10"])
+
+        border_size = _int_option(options.get("border_size"))
+        if border_size and border_size > 0:
+            border_color = str(options.get("border_color") or "black")
+            command.extend([
+                "-bordercolor",
+                border_color,
+                "-border",
+                f"{border_size}x{border_size}",
+            ])
+
+        frame_size = _int_option(options.get("frame_size"))
+        if frame_size and frame_size > 0:
+            command.extend(["-frame", f"{frame_size}x{frame_size}"])
+
+        watermark_text = options.get("watermark_text")
+        if watermark_text:
+            command.extend(_watermark_args(watermark_text, options))
+            command.extend(["-gravity", "none"])
+
+        if options.get("strip"):
+            command.append("-strip")
+
+        quality = _int_option(options.get("quality"))
         if quality is not None:
             command.extend(["-quality", str(quality)])
 
-        if task.options.get("strip", False):
-            command.append("-strip")
+        if task.format_out.lower() == "ico" and not resize_value:
+            command.extend(["-define", f"icon:auto-resize={ICO_AUTO_RESIZE}"])
 
         command.append(str(task.output_path))
         return command
@@ -109,3 +203,81 @@ def _imagemagick_binary() -> str:
     if which("magick"):
         return "magick"
     return "convert"
+
+
+def _resolve_resize(options: dict) -> str | None:
+    raw = options.get("resize")
+    mode = (options.get("resize_mode") or "dimension").lower()
+    if raw is None or raw == "":
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+
+    if mode == "dimension":
+        return text
+    if mode == "longest_edge":
+        edge = _int_option(text)
+        if not edge or edge <= 0:
+            return None
+        return f"{edge}x{edge}>"
+    if mode == "percent":
+        percent = _float_option(text)
+        if percent is None or percent <= 0:
+            return None
+        return f"{_format_float(percent)}%"
+    if mode == "megapixel":
+        megapixels = _float_option(text)
+        if megapixels is None or megapixels <= 0:
+            return None
+        pixels = int(megapixels * 1_000_000)
+        return f"@{pixels}"
+    return text
+
+
+def _watermark_args(text: str, options: dict) -> list[str]:
+    gravity = str(options.get("watermark_position") or "southeast").lower()
+    if gravity not in VALID_GRAVITIES:
+        gravity = "southeast"
+    opacity = _int_option(options.get("watermark_opacity"))
+    if opacity is None:
+        opacity = 60
+    opacity = max(0, min(100, opacity))
+    alpha = opacity / 100.0
+    fill = f"rgba(255,255,255,{_format_float(alpha)})"
+    pointsize = _int_option(options.get("watermark_size")) or 36
+    return [
+        "-gravity",
+        gravity,
+        "-pointsize",
+        str(pointsize),
+        "-fill",
+        fill,
+        "-annotate",
+        "+12+12",
+        str(text),
+    ]
+
+
+def _int_option(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _float_option(value: object) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_float(value: float) -> str:
+    if value == int(value):
+        return str(int(value))
+    return f"{value:.3f}".rstrip("0").rstrip(".")

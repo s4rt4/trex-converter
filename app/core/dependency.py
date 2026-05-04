@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib.util import find_spec
 from shutil import which
 
 
@@ -19,6 +20,14 @@ class DependencyChecker:
         }
 
     def check(self, binary: str) -> DependencyStatus:
+        if binary.startswith("python:"):
+            module_name = binary.split(":", 1)[1]
+            return DependencyStatus(
+                binary=binary,
+                available=find_spec(module_name) is not None,
+                path=module_name,
+            )
+
         candidates = self.aliases.get(binary, (binary,))
         for candidate in candidates:
             resolved = which(candidate)

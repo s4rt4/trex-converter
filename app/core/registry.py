@@ -7,7 +7,7 @@ from app.engines.ffmpeg_engine import FFmpegEngine
 from app.engines.imagemagick_engine import IMAGE_FORMATS, ImageMagickEngine
 from app.engines.libreoffice_engine import LibreOfficeEngine, SUPPORTED_INPUT_FORMATS
 from app.engines.ocr_engine import TesseractOCREngine
-from app.engines.pdf_engine import PDFEngine
+from app.engines.pdf_engine import PDF_IMAGE_FORMATS, PDFEngine
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,10 +86,15 @@ def default_entries() -> list[RegistryEntry]:
         ("mov", "mp4", "ffmpeg", FFmpegEngine),
         ("wav", "mp3", "ffmpeg", FFmpegEngine),
         ("flac", "mp3", "ffmpeg", FFmpegEngine),
+        *[
+            ("pdf", format_out, "pdf", PDFEngine)
+            for format_out in PDF_IMAGE_FORMATS
+        ],
+        ("pdf", "pdf", "pdf", PDFEngine),
+        ("pdf", "txt", "pdf", PDFEngine),
         ("png", "txt", "tesseract", TesseractOCREngine),
         ("jpg", "txt", "tesseract", TesseractOCREngine),
         ("jpeg", "txt", "tesseract", TesseractOCREngine),
-        ("pdf", "txt", "tesseract", TesseractOCREngine),
     ] + document_pairs + image_pairs
     return [
         RegistryEntry(

@@ -11,10 +11,11 @@ Implemented:
 - Queue in-memory async dengan concurrency limit, cancel, retry, dan event callback.
 - Dependency checker berbasis `PATH`.
 - Registry untuk routing format ke engine.
-- Engine abstraction plus stub engine untuk LibreOffice, PDF, dan OCR.
+- Engine abstraction plus stub engine untuk OCR.
 - FFmpeg engine dasar via `asyncio.create_subprocess_exec`, progress parser, cancel, dan option audio/video sederhana.
-- ImageMagick engine dasar via `asyncio.create_subprocess_exec`, dengan opsi `resize`, `quality`, dan `strip`.
+- ImageMagick engine lengkap dengan transform (rotate/flip/flop/trim/crop/aspect crop), resize modes (dimension/longest-edge/percent/megapixel), color (grayscale/sepia/negate/normalize/brightness/contrast/gamma), filter (blur/sharpen/denoise/vignette), border & frame, text watermark, density, dan ICO multi-resolution.
 - LibreOffice engine dasar via `asyncio.create_subprocess_exec` untuk document-to-PDF, timeout, cancel, dan output renaming.
+- PDF engine via PyMuPDF: render halaman ke PNG/JPG, ekstrak teks ke TXT, plus operasi PDF→PDF (extract pages dengan range syntax, rotate, compress, encrypt/decrypt AES-256, strip metadata, watermark teks dengan 9-position gravity dan opacity).
 - SQLite task repository untuk history dan resume pending/running task.
 - UI skeleton terhubung ke queue: progress bar per task, tombol cancel dan retry.
 - App logo SVG plus hicolor PNG assets untuk integrasi desktop Debian.
@@ -55,6 +56,8 @@ Engine asli membutuhkan binary sistem sesuai fitur:
 - `libreoffice`
 - `qpdf`
 - `tesseract`
+
+PDF extract membutuhkan dependency Python `PyMuPDF` dari `pyproject.toml`.
 
 Install di Debian/Ubuntu:
 

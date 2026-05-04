@@ -23,9 +23,10 @@ Sudah ada:
 - `ConversionRegistry` untuk routing format ke engine.
 - Dependency checker untuk binary system.
 - FFmpeg engine nyata dengan progress parsing dan cancel subprocess.
-- ImageMagick engine nyata dengan opsi `resize`, `quality`, dan `strip`.
+- ImageMagick engine nyata dengan opsi lengkap: transform (rotate, flip, flop, auto-trim, free crop, aspect crop), resize modes (dimension, longest edge, percent, megapixel), color (grayscale, sepia, negate, normalize, brightness, contrast, gamma), filter (blur, sharpen, denoise, vignette), border/frame, watermark teks dengan gravity dan opacity, density, dan ICO multi-resolution auto-resize.
 - LibreOffice engine nyata untuk document-to-PDF dengan timeout dan cancel subprocess.
-- Stub engine untuk PDF dan OCR.
+- PDF engine nyata via PyMuPDF: render halaman PDF ke PNG/JPG, ekstrak teks ke TXT, plus operasi PDF→PDF (extract pages dengan range syntax, rotate, compress, encrypt/decrypt AES-256, strip metadata, watermark teks dengan gravity 9-arah dan opacity).
+- Stub engine untuk OCR.
 - UI PySide6 dengan sidebar.
 - Icon pack `qtawesome`.
 - App logo SVG and hicolor PNG icon assets.
@@ -36,10 +37,12 @@ Sudah ada:
 UI memakai sidebar, bukan toolbar utama.
 
 Sidebar menu:
+- Dashboard
 - Image
 - Video
 - Document
 - PDF Tools
+- About
 
 Setiap menu menangani satu jenis conversion. Setiap halaman punya:
 - Input selector.
@@ -101,7 +104,8 @@ Icon sudah dipakai di:
 - `app/ui/theme.py`: brand colors.
 - `app/ui/icons.py`: icon helper.
 - `app/ui/main_window.py`: sidebar layout, global stylesheet.
-- `app/ui/conversion_page.py`: reusable page per category.
+- `app/ui/conversion_page.py`: reusable page per category, mendukung `extra_options_factory` untuk inject panel opsi khusus.
+- `app/ui/image_options.py`: panel tabbed lengkap untuk opsi ImageMagick lanjutan.
 - `app/ui/queue_panel.py`: global queue table.
 - `app/core/task.py`: task dataclass and status.
 - `app/core/queue.py`: async task queue.
@@ -110,6 +114,10 @@ Icon sudah dipakai di:
 - `app/engines/ffmpeg_engine.py`: real FFmpeg engine.
 - `app/engines/imagemagick_engine.py`: real ImageMagick engine and image format list.
 - `app/engines/libreoffice_engine.py`: real LibreOffice document-to-PDF engine.
+- `app/engines/pdf_engine.py`: real PyMuPDF engine — render to image, extract text, dan operasi PDF→PDF (extract/rotate/compress/encrypt/decrypt/strip-metadata/watermark-text).
+- `app/ui/pdf_operations.py`: panel tabbed (Pages / Security / Compress / Watermark / Metadata) untuk PDF Tools page.
+- `app/ui/dashboard_page.py`: dashboard summary and all-task queue.
+- `app/ui/about_page.py`: about page.
 - `assets/trex-logo.svg`: source app logo.
 - `assets/icons/hicolor/`: generated app icons for desktop packaging.
 
@@ -118,7 +126,7 @@ Icon sudah dipakai di:
 From project root:
 
 ```bash
-cd /home/sarta/Downloads/trex-converter
+cd /home/sarta/Project/trex-converter
 .venv/bin/t-rex-converter
 ```
 
@@ -131,14 +139,14 @@ Alternative:
 ## Test
 
 ```bash
-cd /home/sarta/Downloads/trex-converter
+cd /home/sarta/Project/trex-converter
 .venv/bin/python -m pytest
 ```
 
 Current expected result:
 
 ```text
-17 passed
+45 passed
 ```
 
 ## System Dependencies
@@ -163,6 +171,7 @@ Project dependencies are in `pyproject.toml`.
 
 Important runtime dependencies:
 - `PySide6`
+- `PyMuPDF`
 - `qasync`
 - `qtawesome`
 
@@ -172,12 +181,14 @@ Development dependencies:
 
 ## Next Likely Work
 
-Useful next tasks:
-- Implement real PDF tools with QPDF/PyMuPDF.
-- Add settings page for default output directory and concurrency.
-- Improve queue filtering/history UI.
-- Add drag-and-drop file input.
-- Add preview/details panel for selected task logs.
+Roadmap lengkap ada di `next-development.md`. Highlight berikutnya:
+- PDF Tools lanjutan: merge, split, page reorder, watermark gambar, page numbering/Bates, metadata edit, repair (qpdf), PDF→DOCX/HTML/EPUB, extract embedded images/attachments, redaction.
+- OCR fungsional (image → searchable PDF, PDF → searchable PDF).
+- Pisahkan Audio dari Video: extract, normalize, trim, ID3 tag.
+- Video: trim, GIF creator, compress target-size, watermark, hardware accel.
+- Document: output multi-format selain PDF.
+- Settings page: default output dir, concurrency, default DPI.
+- Batch drag-and-drop multi-file.
 - Package `.deb` properly.
 
 ## Codex Session Handoff

@@ -5,6 +5,15 @@
 - Reworked the main UI into a sidebar layout with separate Image, Video, Document, and PDF Tools pages.
 - Added category-specific task forms and filtered task queues per page.
 - Added real async LibreOffice document-to-PDF conversion with timeout, cancel, and output renaming.
+- Added PyMuPDF-based PDF page extraction to PNG/JPG with multi-page output naming, plus PDF→TXT text extraction.
+- Added PDF operations engine for extract pages (range syntax `1-3,5,8-10`), rotate, compress (garbage + deflate + clean), encrypt/decrypt with AES-256, strip metadata, and text watermark with 9-position gravity and opacity.
+- Added a tabbed `PDFOperationsPanel` to the PDF Tools page (Pages / Security / Compress / Watermark / Metadata).
+- Routed `pdf→pdf` and `pdf→txt` to the PyMuPDF engine; the dependency checker now supports a `python:<module>` prefix to verify Python module availability.
+- Expanded the ImageMagick engine with transform (rotate, flip, flop, auto-trim, free crop, aspect crop), resize modes (dimension, longest edge, percent, megapixel), color (grayscale, sepia, negate, normalize, brightness, contrast, gamma), filter (blur, sharpen, denoise, vignette), border/frame, text watermark with gravity and opacity, output density, and ICO multi-resolution auto-resize.
+- Added a tabbed `ImageOptionsPanel` to the Image page exposing all advanced ImageMagick options.
+- Added `extra_options_factory` hook to `ConversionPageConfig` so any page can attach a category-specific options panel.
+- Added Dashboard and About sidebar pages; each conversion page now has Convert / Queue tabs and the queue panel shows file thumbnails or mime icons.
+- Added a roadmap document at `next-development.md` tracking advanced features per module and proposed new modules (Audio, Subtitle, Ebook, Archive, QR/Barcode, Metadata).
 
 ## 0.3.0
 
