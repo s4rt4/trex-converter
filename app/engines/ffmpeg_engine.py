@@ -214,6 +214,9 @@ def _audio_filter_chain(options: dict, *, drop_audio: bool) -> str:
         sign = "+" if volume_db > 0 else ""
         filters.append(f"volume={sign}{_format_seconds(volume_db)}dB")
 
+    if options.get("vocal_remove"):
+        filters.append("pan=stereo|c0=c0-c1|c1=c1-c0")
+
     if options.get("loudnorm"):
         filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
 
@@ -321,7 +324,31 @@ def _codec_options(task: Task) -> list[str]:
             raise RuntimeError(f"Unknown compress preset: {preset}")
         options.extend(["-preset", str(preset).lower()])
 
+    options.extend(_metadata_options(task.options))
+
     return options
+
+
+_ID3_FIELDS = {
+    "title": "title",
+    "artist": "artist",
+    "album": "album",
+    "year": "date",
+    "track": "track",
+    "genre": "genre",
+    "comment": "comment",
+    "album_artist": "album_artist",
+}
+
+
+def _metadata_options(options: dict) -> list[str]:
+    args: list[str] = []
+    for option_key, ffmpeg_key in _ID3_FIELDS.items():
+        value = options.get(f"id3_{option_key}")
+        if value is None or value == "":
+            continue
+        args.extend(["-metadata", f"{ffmpeg_key}={value}"])
+    return args
 
 
 def _parse_duration(line: str) -> float | None:

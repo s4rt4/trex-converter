@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- PDF wave 2: page reorder action (explicit page list), edit-metadata action (title/author/subject/keywords/creator), PDF→HTML extraction via PyMuPDF, and PDF repair via qpdf round-trip. PDF Tools input restricted to PDF only (previously also accepted png/jpg, duplicating the Image page).
+- Audio wave 2: ID3 tag editor (title/artist/album/year/genre/track via `-metadata`) plus vocal remove via `pan=stereo|c0=c0-c1|c1=c1-c0`.
 - Added a Settings sidebar page with persisted defaults at `~/.config/trex-converter/settings.json` (output folder, max concurrency, image quality, PDF DPI). Concurrency applies on next launch; output folder is honored by every conversion page when suggesting an output path.
 - Added a Subtitle sidebar page powered by a new pure-Python `SubtitleEngine` (no external binary): SRT ↔ VTT conversion with optional time shift; `EngineCapabilities.requires_binary=""` is now treated as always-available by the dependency checker.
 - Expanded the LibreOffice engine to a full Document format matrix: text docs ↔ DOCX/ODT/RTF/HTML/EPUB/TXT/PDF, spreadsheets ↔ XLSX/ODS/CSV/HTML/PDF, presentations ↔ PPTX/ODP/PDF (52 pairs). Document page output combo now exposes every reachable target.

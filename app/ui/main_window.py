@@ -111,8 +111,8 @@ PAGE_CONFIGS = (
     ),
     ConversionPageConfig(
         title="PDF Tools",
-        input_formats=("pdf", "jpg", "jpeg", "png"),
-        default_output="png",
+        input_formats=("pdf",),
+        default_output="pdf",
         engine_name="pdf",
         kind="pdf",
         extra_options_factory=PDFOperationsPanel,

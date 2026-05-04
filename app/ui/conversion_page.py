@@ -332,7 +332,7 @@ class ConversionPage(QWidget):
                 "pptx", "odp",
             }
         if self.config.kind == "pdf":
-            return output in {*IMAGE_FORMATS, "txt", "pdf"}
+            return output in {*IMAGE_FORMATS, "txt", "pdf", "html"}
         if self.config.kind == "ocr":
             return output in {"txt", "pdf", "hocr", "tsv"}
         if self.config.kind == "subtitle":

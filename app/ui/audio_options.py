@@ -52,6 +52,7 @@ class AudioOptionsPanel(QWidget):
 
         tabs.addTab(self._build_trim_page(tabs), "Trim")
         tabs.addTab(self._build_effects_page(tabs), "Effects")
+        tabs.addTab(self._build_tags_page(tabs), "Tags")
         tabs.addTab(self._build_output_page(tabs), "Output")
 
     def _build_trim_page(self, parent: QWidget) -> QWidget:
@@ -85,6 +86,9 @@ class AudioOptionsPanel(QWidget):
 
         self.volume_slider, self.volume_label = _slider(page, -20, 20, 0, suffix=" dB")
         self.loudnorm_check = QCheckBox("Loudness normalize (EBU R128)", page)
+        self.vocal_remove_check = QCheckBox(
+            "Vocal remove (cancel center channel)", page
+        )
 
         grid.addWidget(_field("Fade in", page), 0, 0)
         grid.addWidget(self.fade_in_input, 0, 1)
@@ -95,10 +99,58 @@ class AudioOptionsPanel(QWidget):
         grid.addWidget(_field("Volume", page), 2, 0)
         grid.addLayout(_slider_row(self.volume_slider, self.volume_label), 2, 1, 1, 3)
         grid.addWidget(self.loudnorm_check, 3, 0, 1, 4)
+        grid.addWidget(self.vocal_remove_check, 4, 0, 1, 4)
 
         info = QLabel(
             "Fade out start = seconds from clip start where fade-out begins. "
-            "Loudnorm targets I=-16 LUFS.",
+            "Loudnorm targets I=-16 LUFS. Vocal remove subtracts the center channel "
+            "(L−R, R−L) — works best on tracks with center-panned vocals.",
+            page,
+        )
+        info.setWordWrap(True)
+        grid.addWidget(info, 5, 0, 1, 4)
+        return page
+
+    def _build_tags_page(self, parent: QWidget) -> QWidget:
+        page = QWidget(parent)
+        grid = QGridLayout(page)
+        grid.setContentsMargins(12, 12, 12, 12)
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(10)
+        grid.setColumnMinimumWidth(0, 110)
+        grid.setColumnMinimumWidth(2, 110)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+
+        self.tag_title_input = QLineEdit(page)
+        self.tag_title_input.setPlaceholderText("e.g. Bohemian Rhapsody")
+        self.tag_artist_input = QLineEdit(page)
+        self.tag_artist_input.setPlaceholderText("e.g. Queen")
+        self.tag_album_input = QLineEdit(page)
+        self.tag_album_input.setPlaceholderText("e.g. A Night at the Opera")
+        self.tag_year_input = QLineEdit(page)
+        self.tag_year_input.setPlaceholderText("e.g. 1975")
+        self.tag_genre_input = QLineEdit(page)
+        self.tag_genre_input.setPlaceholderText("e.g. Rock")
+        self.tag_track_input = QLineEdit(page)
+        self.tag_track_input.setPlaceholderText("e.g. 11/12")
+
+        grid.addWidget(_field("Title", page), 0, 0)
+        grid.addWidget(self.tag_title_input, 0, 1, 1, 3)
+        grid.addWidget(_field("Artist", page), 1, 0)
+        grid.addWidget(self.tag_artist_input, 1, 1)
+        grid.addWidget(_field("Album", page), 1, 2)
+        grid.addWidget(self.tag_album_input, 1, 3)
+        grid.addWidget(_field("Year", page), 2, 0)
+        grid.addWidget(self.tag_year_input, 2, 1)
+        grid.addWidget(_field("Genre", page), 2, 2)
+        grid.addWidget(self.tag_genre_input, 2, 3)
+        grid.addWidget(_field("Track", page), 3, 0)
+        grid.addWidget(self.tag_track_input, 3, 1)
+
+        info = QLabel(
+            "Empty fields are skipped. Tags require an output format that supports "
+            "metadata (mp3, m4a, flac, ogg, opus).",
             page,
         )
         info.setWordWrap(True)
@@ -150,6 +202,21 @@ class AudioOptionsPanel(QWidget):
 
         if self.loudnorm_check.isChecked():
             options["loudnorm"] = True
+
+        if self.vocal_remove_check.isChecked():
+            options["vocal_remove"] = True
+
+        for option_key, widget in (
+            ("title", self.tag_title_input),
+            ("artist", self.tag_artist_input),
+            ("album", self.tag_album_input),
+            ("year", self.tag_year_input),
+            ("genre", self.tag_genre_input),
+            ("track", self.tag_track_input),
+        ):
+            value = widget.text().strip()
+            if value:
+                options[f"id3_{option_key}"] = value
 
         channels = self.channels_combo.currentData()
         if channels:

@@ -24,11 +24,20 @@ except ImportError:  # pragma: no cover
 
 PAGE_ACTIONS = (
     ("Extract pages", "extract_pages"),
+    ("Reorder pages", "reorder"),
     ("Rotate pages", "rotate"),
 )
 SECURITY_ACTIONS = (
     ("Encrypt", "encrypt"),
     ("Decrypt", "decrypt"),
+)
+COMPRESS_ACTIONS = (
+    ("Compress (PyMuPDF garbage + deflate)", "compress"),
+    ("Repair (qpdf round-trip)", "repair"),
+)
+METADATA_ACTIONS = (
+    ("Strip all metadata", "strip_metadata"),
+    ("Edit metadata fields", "edit_metadata"),
 )
 ROTATIONS = (
     ("90° CW", 90),
@@ -115,13 +124,18 @@ class PDFOperationsPanel(QWidget):
         grid = QGridLayout(page)
         _grid_setup(grid)
 
+        self.compress_action_combo = _combo(page, COMPRESS_ACTIONS)
+
         info = QLabel(
-            "Garbage-collect, dedupe, and deflate the PDF stream via PyMuPDF.\n"
-            "No additional options for this action.",
+            "Compress: PyMuPDF garbage-collect + dedupe + deflate.\n"
+            "Repair: round-trip through qpdf to recover from minor corruption.",
             page,
         )
         info.setWordWrap(True)
-        grid.addWidget(info, 0, 0, 1, 2)
+
+        grid.addWidget(_field("Action", page), 0, 0)
+        grid.addWidget(self.compress_action_combo, 0, 1)
+        grid.addWidget(info, 1, 0, 1, 2)
         return page
 
     def _build_watermark_tab(self, parent: QWidget) -> QWidget:
@@ -169,13 +183,33 @@ class PDFOperationsPanel(QWidget):
         grid = QGridLayout(page)
         _grid_setup(grid)
 
+        self.metadata_action_combo = _combo(page, METADATA_ACTIONS)
+        self.meta_title_input = QLineEdit(page)
+        self.meta_author_input = QLineEdit(page)
+        self.meta_subject_input = QLineEdit(page)
+        self.meta_keywords_input = QLineEdit(page)
+        self.meta_creator_input = QLineEdit(page)
+
         info = QLabel(
-            "Strip all PDF metadata (title, author, subject, keywords, producer).\n"
-            "No additional options for this action.",
+            "Strip clears all metadata. Edit writes only the fields you fill in; "
+            "empty fields are skipped.",
             page,
         )
         info.setWordWrap(True)
-        grid.addWidget(info, 0, 0, 1, 2)
+
+        grid.addWidget(_field("Action", page), 0, 0)
+        grid.addWidget(self.metadata_action_combo, 0, 1, 1, 3)
+        grid.addWidget(_field("Title", page), 1, 0)
+        grid.addWidget(self.meta_title_input, 1, 1, 1, 3)
+        grid.addWidget(_field("Author", page), 2, 0)
+        grid.addWidget(self.meta_author_input, 2, 1)
+        grid.addWidget(_field("Subject", page), 2, 2)
+        grid.addWidget(self.meta_subject_input, 2, 3)
+        grid.addWidget(_field("Keywords", page), 3, 0)
+        grid.addWidget(self.meta_keywords_input, 3, 1, 1, 3)
+        grid.addWidget(_field("Creator", page), 4, 0)
+        grid.addWidget(self.meta_creator_input, 4, 1, 1, 3)
+        grid.addWidget(info, 5, 0, 1, 4)
         return page
 
     def collect_options(self) -> dict:
@@ -194,6 +228,11 @@ class PDFOperationsPanel(QWidget):
                 options["rotation_degrees"] = self.pages_rotation_combo.currentData() or 90
             return options
 
+        if tab == "compress":
+            return {
+                "operation": self.compress_action_combo.currentData() or "compress",
+            }
+
         if tab == "security":
             action = self.security_action_combo.currentData() or "encrypt"
             options = {"operation": action}
@@ -209,9 +248,6 @@ class PDFOperationsPanel(QWidget):
                     options["password"] = user_pw
             return options
 
-        if tab == "compress":
-            return {"operation": "compress"}
-
         if tab == "watermark":
             text = self.watermark_text_input.text().strip()
             options = {"operation": "watermark_text"}
@@ -225,7 +261,20 @@ class PDFOperationsPanel(QWidget):
             return options
 
         if tab == "metadata":
-            return {"operation": "strip_metadata"}
+            action = self.metadata_action_combo.currentData() or "strip_metadata"
+            options = {"operation": action}
+            if action == "edit_metadata":
+                for option_key, widget in (
+                    ("title", self.meta_title_input),
+                    ("author", self.meta_author_input),
+                    ("subject", self.meta_subject_input),
+                    ("keywords", self.meta_keywords_input),
+                    ("creator", self.meta_creator_input),
+                ):
+                    value = widget.text().strip()
+                    if value:
+                        options[f"meta_{option_key}"] = value
+            return options
 
         return {}
 

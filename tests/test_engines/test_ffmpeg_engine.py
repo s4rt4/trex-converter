@@ -386,6 +386,67 @@ def test_sample_rate_emits_ar_flag() -> None:
     assert command[command.index("-ar") + 1] == "44100"
 
 
+def test_vocal_remove_appends_pan_filter() -> None:
+    command = _build({"vocal_remove": True}, format_in="mp3", format_out="mp3")
+
+    af = command[command.index("-af") + 1]
+    assert af == "pan=stereo|c0=c0-c1|c1=c1-c0"
+
+
+def test_vocal_remove_chains_before_loudnorm() -> None:
+    command = _build(
+        {"vocal_remove": True, "loudnorm": True},
+        format_in="mp3",
+        format_out="mp3",
+    )
+
+    af = command[command.index("-af") + 1]
+    chain = af.split(",")
+    assert chain[0].startswith("pan=stereo")
+    assert chain[1].startswith("loudnorm=")
+
+
+def test_id3_metadata_options_pass_through() -> None:
+    command = _build(
+        {
+            "id3_title": "Bohemian Rhapsody",
+            "id3_artist": "Queen",
+            "id3_album": "A Night at the Opera",
+            "id3_year": "1975",
+            "id3_genre": "Rock",
+            "id3_track": "11/12",
+        },
+        format_in="mp3",
+        format_out="mp3",
+    )
+
+    metadata_args: list[str] = []
+    for index, arg in enumerate(command):
+        if arg == "-metadata":
+            metadata_args.append(command[index + 1])
+
+    assert "title=Bohemian Rhapsody" in metadata_args
+    assert "artist=Queen" in metadata_args
+    assert "album=A Night at the Opera" in metadata_args
+    # year is mapped to ffmpeg "date" key
+    assert "date=1975" in metadata_args
+    assert "genre=Rock" in metadata_args
+    assert "track=11/12" in metadata_args
+
+
+def test_id3_skips_empty_fields() -> None:
+    command = _build(
+        {"id3_title": "Only Title", "id3_artist": ""},
+        format_in="mp3",
+        format_out="mp3",
+    )
+
+    metadata_args = [
+        command[index + 1] for index, arg in enumerate(command) if arg == "-metadata"
+    ]
+    assert metadata_args == ["title=Only Title"]
+
+
 def test_audio_output_skips_video_filters_but_keeps_audio_filters() -> None:
     command = _build(
         {

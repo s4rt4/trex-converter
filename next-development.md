@@ -56,8 +56,8 @@ Pisahkan dari Video supaya alur pengguna fokus.
 - [x] Trim, fade in/out, gain — gain ±20 dB, fade-in/out via `afade`
 - [x] Stereo↔mono, sample-rate / bitrate convert — `-ac` 1/2, `-ar` 22.05k/44.1k/48k/96k, bitrate via main form
 - [ ] Merge / mix multi-track
-- [ ] Tag editor ID3 (title/artist/album/cover art)
-- [ ] Vocal remove sederhana (center-channel cancel)
+- [~] Tag editor ID3 (title/artist/album/cover art) — title/artist/album/year/genre/track via `-metadata`; cover art belum
+- [x] Vocal remove sederhana (center-channel cancel) — `pan=stereo|c0=c0-c1|c1=c1-c0`
 
 ## 4. Document Module (LibreOffice)
 
@@ -77,15 +77,15 @@ ROI tertinggi karena tool gratis dan use-case-nya luas.
 - [ ] Merge beberapa PDF jadi satu
 - [ ] Split by range / by N-pages / by ukuran file
 - [x] Extract pages dengan range syntax (`1-3,5,8-10`)
-- [~] Reorder & rotate halaman — rotate selesai, reorder belum
+- [x] Reorder & rotate halaman
 - [x] Compress (PyMuPDF garbage + deflate + clean) — image downsample dan linearize via qpdf belum
 - [x] Encrypt / decrypt (password owner & user) — AES-256
 - [~] Watermark teks atau gambar — watermark teks selesai, watermark gambar belum
 - [ ] Page numbering / Bates numbering
-- [~] Metadata edit (title/author/subject/keywords) atau strip — strip selesai, edit belum
-- [ ] Repair PDF korup (qpdf)
+- [x] Metadata edit (title/author/subject/keywords) atau strip — keduanya selesai (action combo Strip / Edit)
+- [x] Repair PDF korup (qpdf) — `qpdf input output` round-trip; treats exit 3 (warnings) as success
 - [ ] PDF → DOCX (LibreOffice atau `pdf2docx`)
-- [~] PDF → HTML / TXT / EPUB (PyMuPDF native) — TXT selesai, HTML/EPUB belum
+- [~] PDF → HTML / TXT / EPUB (PyMuPDF native) — TXT dan HTML selesai; EPUB belum
 - [ ] Extract embedded images
 - [ ] Extract embedded attachments
 - [ ] Redaction (PyMuPDF `add_redact_annot`)
@@ -130,3 +130,5 @@ ROI tertinggi karena tool gratis dan use-case-nya luas.
 - 2026-05-04 — Document Module gelombang 1 selesai: LibreOffice engine sekarang punya format matrix penuh — text doc (doc/docx/odt/rtf) ↔ docx/odt/rtf/html/epub/txt/pdf, spreadsheet (xls/xlsx/ods) ↔ xlsx/ods/csv/html/pdf, presentation (ppt/pptx/odp) ↔ pptx/odp/pdf (52 pairs total). Helper `_find_converted_file` digeneralisasi dari `_find_converted_pdf` untuk handle ekstensi apa pun. Document page output filter di-tweak agar combo menampilkan semua format dokumen relevan. Test naik 101 → 105 (4 tes baru: text/spreadsheet/presentation supports + non-PDF subprocess flow).
 - 2026-05-04 — Subtitle Tools modul baru: engine Python-pure `SubtitleEngine` (no external dep) untuk SRT↔VTT dengan parser regex robust (skip WEBVTT/NOTE/STYLE blocks, optional cue identifier), time shift +/-3600s (clamp ke 0 saat negatif overshoot), `EngineCapabilities.requires_binary=""` ditambah dukungan di `DependencyChecker` (return available untuk binary kosong). Sidebar entri "Subtitle" (ikon `fa5s.closed-captioning`) + panel single-pane time-shift. Test suite +11 (parser, formatter, engine flow).
 - 2026-05-04 — Settings page (cross-cutting §8) selesai: `app/core/settings.py` Settings dataclass + JSON persistence di `~/.config/trex-converter/settings.json` + module-level cache (`get_settings`/`set_settings`); fields: `output_dir`, `max_concurrency`, `default_image_quality`, `default_pdf_dpi`. SettingsPage di sidebar (ikon `fa5s.cog`, sebelum About). `runner.create_default_queue` baca `max_concurrency` dari settings (apply on launch); `MainWindow.__init__` juga; `ConversionPage._update_output_path` honor `output_dir` saat suggest path output. Test +6 (load defaults, corrupt JSON, round-trip, unknown keys, non-dict payload). Test suite final 101 → 122 passed.
+- 2026-05-05 — Audio Module gelombang 2 mini: ID3 tag editor (title/artist/album/year→date/genre/track via `-metadata`) dan vocal remove (`pan=stereo|c0=c0-c1|c1=c1-c0`). Panel `AudioOptionsPanel` dapat tab "Tags" baru + checkbox "Vocal remove" di tab Effects. Test +4.
+- 2026-05-05 — PDF Tools gelombang 2 mini-batch: page reorder (operasi baru, pakai explicit list `3,1,2,4`), edit metadata (title/author/subject/keywords/creator via PyMuPDF `set_metadata`), PDF → HTML (PyMuPDF `get_text("html")` di-wrap dalam dokumen HTML5), repair via qpdf (round-trip, treats exit code 3/warnings sebagai success). Panel `PDFOperationsPanel`: Pages tab dapat aksi "Reorder", Compress tab dapat action combo (Compress/Repair), Metadata tab di-redesign jadi form (action Strip/Edit + 5 field). PDF Tools page input direstrict ke `pdf` only (sebelumnya menerima png/jpg/jpeg yang duplikasi Image page). Test +9 (reorder, edit metadata, html extraction, repair success/warning/error). Test suite final 122 → 135 passed.

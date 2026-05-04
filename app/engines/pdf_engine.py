@@ -10,20 +10,24 @@ from app.engines.base import BaseEngine, EngineCapabilities
 
 
 PDF_IMAGE_FORMATS = {"jpg", "jpeg", "png"}
-PDF_TEXT_FORMATS = {"txt"}
+PDF_TEXT_FORMATS = {"txt", "html"}
 SUPPORTED_PAIRS = (
     {("pdf", format_out) for format_out in PDF_IMAGE_FORMATS}
     | {("pdf", "pdf")}
     | {("pdf", format_out) for format_out in PDF_TEXT_FORMATS}
 )
 DEFAULT_DPI = 200
+PDF_METADATA_FIELDS = ("title", "author", "subject", "keywords", "creator", "producer")
 PDF_OPERATIONS = {
     "extract_pages",
+    "reorder",
     "rotate",
     "compress",
+    "repair",
     "encrypt",
     "decrypt",
     "strip_metadata",
+    "edit_metadata",
     "watermark_text",
 }
 GRAVITY_TO_FRACTION = {
@@ -56,8 +60,10 @@ class PDFEngine(BaseEngine):
 
         if format_out in PDF_IMAGE_FORMATS:
             await self._render_pages(task, output_path)
-        elif format_out in PDF_TEXT_FORMATS:
+        elif format_out == "txt":
             await self._extract_text(task, output_path)
+        elif format_out == "html":
+            await self._extract_html(task, output_path)
         elif format_out == "pdf":
             await self._run_pdf_operation(task, output_path)
         else:
@@ -113,10 +119,70 @@ class PDFEngine(BaseEngine):
         task.append_log(f"Wrote text: {output_path}")
         task.progress = 1.0
 
+    async def _run_qpdf_repair(self, task: Task, output_path: Path) -> None:
+        command = ["qpdf", str(task.input_path), str(output_path)]
+        task.append_log("Running: " + " ".join(command))
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout_bytes, stderr_bytes = await process.communicate()
+        for stream in (stdout_bytes, stderr_bytes):
+            text = stream.decode("utf-8", errors="replace").strip()
+            if text:
+                task.append_log(text)
+        # qpdf returns 0 = success, 3 = success with warnings (non-fatal)
+        if process.returncode not in (0, 3):
+            raise RuntimeError(f"qpdf exited with code {process.returncode}")
+        task.append_log(f"Repaired PDF written to {output_path}")
+        task.progress = 1.0
+
+    async def _extract_html(self, task: Task, output_path: Path) -> None:
+        fitz = _load_fitz()
+        task.append_log("Extracting HTML via PyMuPDF")
+        document = fitz.open(str(task.input_path))
+        try:
+            page_count = len(document)
+            page_chunks: list[str] = []
+            for index in range(page_count):
+                page = document.load_page(index)
+                page_chunks.append(
+                    f'<section class="pdf-page" data-page="{index + 1}">'
+                )
+                page_chunks.append(page.get_text("html"))
+                page_chunks.append("</section>")
+                task.progress = (index + 1) / max(page_count, 1)
+                await asyncio.sleep(0)
+        finally:
+            _close(document)
+
+        title = Path(task.input_path).stem
+        body = "\n".join(page_chunks)
+        document_html = (
+            "<!DOCTYPE html>\n"
+            '<html lang="en">\n'
+            "<head>\n"
+            '<meta charset="utf-8">\n'
+            f"<title>{title}</title>\n"
+            "</head>\n"
+            "<body>\n"
+            f"{body}\n"
+            "</body>\n"
+            "</html>\n"
+        )
+        output_path.write_text(document_html, encoding="utf-8")
+        task.append_log(f"Wrote HTML: {output_path}")
+        task.progress = 1.0
+
     async def _run_pdf_operation(self, task: Task, output_path: Path) -> None:
         operation = (task.options.get("operation") or "extract_pages").lower()
         if operation not in PDF_OPERATIONS:
             raise RuntimeError(f"Unsupported PDF operation: {operation}")
+
+        if operation == "repair":
+            await self._run_qpdf_repair(task, output_path)
+            return
 
         fitz = _load_fitz()
         task.append_log(f"PDF operation: {operation}")
@@ -136,11 +202,13 @@ class PDFEngine(BaseEngine):
 
             handler = {
                 "extract_pages": _op_extract_pages,
+                "reorder": _op_reorder,
                 "rotate": _op_rotate,
                 "compress": _op_compress,
                 "encrypt": _op_encrypt,
                 "decrypt": _op_decrypt,
                 "strip_metadata": _op_strip_metadata,
+                "edit_metadata": _op_edit_metadata,
                 "watermark_text": _op_watermark_text,
             }[operation]
 
@@ -162,6 +230,29 @@ def _op_extract_pages(document, fitz: ModuleType, task: Task, page_count: int) -
         raise RuntimeError("No pages selected for extraction")
     document.select(pages)
     task.append_log(f"Extracted {len(pages)} page(s)")
+
+
+def _op_reorder(document, fitz: ModuleType, task: Task, page_count: int) -> None:
+    pages = _parse_page_range(task.options.get("pages"), page_count)
+    if not pages:
+        raise RuntimeError("Reorder requires an explicit page list (e.g. 3,1,2,4)")
+    document.select(pages)
+    task.append_log(f"Reordered to {len(pages)} page(s) in given order")
+
+
+def _op_edit_metadata(document, fitz: ModuleType, task: Task, page_count: int) -> None:
+    metadata: dict[str, str] = {}
+    for field in PDF_METADATA_FIELDS:
+        value = task.options.get(f"meta_{field}")
+        if value is None or value == "":
+            continue
+        metadata[field] = str(value)
+    if not metadata:
+        raise RuntimeError(
+            "Provide at least one metadata field (title, author, subject, keywords, creator, producer)"
+        )
+    document.set_metadata(metadata)
+    task.append_log(f"Set metadata: {', '.join(sorted(metadata.keys()))}")
 
 
 def _op_rotate(document, fitz: ModuleType, task: Task, page_count: int) -> None:

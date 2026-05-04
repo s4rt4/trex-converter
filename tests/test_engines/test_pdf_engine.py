@@ -387,3 +387,211 @@ async def test_unknown_operation_raises(tmp_path, monkeypatch) -> None:
 
     with pytest.raises(RuntimeError, match="Unsupported PDF operation"):
         await PDFEngine().convert(task)
+
+
+@pytest.mark.asyncio
+async def test_reorder_passes_explicit_order_to_select(tmp_path, monkeypatch) -> None:
+    document = FakeDocument(page_count=4)
+    _install_fake_fitz(monkeypatch, document)
+
+    task = _pdf_task(tmp_path, {"operation": "reorder", "pages": "3,1,2,4"})
+
+    await PDFEngine().convert(task)
+
+    # 1-based input "3,1,2,4" maps to 0-based [2, 0, 1, 3]
+    assert document.selected_pages == [2, 0, 1, 3]
+
+
+@pytest.mark.asyncio
+async def test_reorder_requires_pages(tmp_path, monkeypatch) -> None:
+    document = FakeDocument(page_count=3)
+    _install_fake_fitz(monkeypatch, document)
+
+    task = _pdf_task(tmp_path, {"operation": "reorder"})
+
+    with pytest.raises(RuntimeError, match="Reorder requires"):
+        await PDFEngine().convert(task)
+
+
+@pytest.mark.asyncio
+async def test_edit_metadata_writes_only_provided_fields(tmp_path, monkeypatch) -> None:
+    document = FakeDocument(page_count=1)
+    _install_fake_fitz(monkeypatch, document)
+
+    task = _pdf_task(
+        tmp_path,
+        {
+            "operation": "edit_metadata",
+            "meta_title": "My PDF",
+            "meta_author": "Sarta",
+            "meta_keywords": "trex, converter",
+        },
+    )
+
+    await PDFEngine().convert(task)
+
+    assert document.metadata_calls == [
+        {"title": "My PDF", "author": "Sarta", "keywords": "trex, converter"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_edit_metadata_requires_at_least_one_field(tmp_path, monkeypatch) -> None:
+    document = FakeDocument(page_count=1)
+    _install_fake_fitz(monkeypatch, document)
+
+    task = _pdf_task(tmp_path, {"operation": "edit_metadata"})
+
+    with pytest.raises(RuntimeError, match="at least one metadata field"):
+        await PDFEngine().convert(task)
+
+
+@pytest.mark.asyncio
+async def test_extract_html_writes_html_document(tmp_path, monkeypatch) -> None:
+    class HtmlPage:
+        def __init__(self, index: int) -> None:
+            self._index = index
+
+        def get_text(self, kind: str = "") -> str:
+            assert kind == "html"
+            return f"<p>page {self._index + 1}</p>"
+
+    class HtmlDocument:
+        def __init__(self) -> None:
+            self._pages = [HtmlPage(i) for i in range(2)]
+
+        def __len__(self) -> int:
+            return 2
+
+        def load_page(self, index: int):
+            return self._pages[index]
+
+        def close(self) -> None:
+            return
+
+    fake_fitz = SimpleNamespace(
+        open=lambda _path: HtmlDocument(),
+        PDF_ENCRYPT_AES_256=4,
+        PDF_ENCRYPT_NONE=0,
+    )
+    monkeypatch.setitem(__import__("sys").modules, "fitz", fake_fitz)
+
+    task = Task(
+        input_path=tmp_path / "doc.pdf",
+        output_path=tmp_path / "doc.html",
+        format_in="pdf",
+        format_out="html",
+        engine="pdf",
+        options={},
+    )
+
+    await PDFEngine().convert(task)
+
+    output = (tmp_path / "doc.html").read_text(encoding="utf-8")
+    assert "<!DOCTYPE html>" in output
+    assert '<title>doc</title>' in output
+    assert '<section class="pdf-page" data-page="1">' in output
+    assert "<p>page 1</p>" in output
+    assert "<p>page 2</p>" in output
+    assert task.progress == 1.0
+
+
+@pytest.mark.asyncio
+async def test_repair_runs_qpdf_subprocess(tmp_path, monkeypatch) -> None:
+    fake_qpdf = tmp_path / "qpdf"
+    fake_qpdf.write_text(
+        "#!/bin/sh\n"
+        "input=\"$1\"\n"
+        "output=\"$2\"\n"
+        "printf 'repaired-pdf' > \"$output\"\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_qpdf.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    input_path = tmp_path / "broken.pdf"
+    input_path.write_bytes(b"%PDF-1.4 fake")
+    output_path = tmp_path / "fixed.pdf"
+
+    task = Task(
+        input_path=input_path,
+        output_path=output_path,
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "repair"},
+    )
+
+    await PDFEngine().convert(task)
+
+    assert output_path.read_text(encoding="utf-8") == "repaired-pdf"
+    assert task.progress == 1.0
+    assert any("Running: qpdf" in line for line in task.log)
+
+
+@pytest.mark.asyncio
+async def test_repair_treats_qpdf_warning_exit_as_success(tmp_path, monkeypatch) -> None:
+    fake_qpdf = tmp_path / "qpdf"
+    fake_qpdf.write_text(
+        "#!/bin/sh\n"
+        "output=\"$2\"\n"
+        "printf 'repaired-with-warnings' > \"$output\"\n"
+        "echo 'WARNING: minor issue' >&2\n"
+        "exit 3\n",
+        encoding="utf-8",
+    )
+    fake_qpdf.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    input_path = tmp_path / "broken.pdf"
+    input_path.write_bytes(b"%PDF-1.4 fake")
+    output_path = tmp_path / "fixed.pdf"
+
+    task = Task(
+        input_path=input_path,
+        output_path=output_path,
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "repair"},
+    )
+
+    await PDFEngine().convert(task)
+
+    assert output_path.read_text(encoding="utf-8") == "repaired-with-warnings"
+
+
+@pytest.mark.asyncio
+async def test_repair_raises_on_qpdf_error(tmp_path, monkeypatch) -> None:
+    fake_qpdf = tmp_path / "qpdf"
+    fake_qpdf.write_text(
+        "#!/bin/sh\n"
+        "echo 'fatal' >&2\n"
+        "exit 2\n",
+        encoding="utf-8",
+    )
+    fake_qpdf.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    input_path = tmp_path / "broken.pdf"
+    input_path.write_bytes(b"%PDF-1.4")
+    output_path = tmp_path / "fixed.pdf"
+
+    task = Task(
+        input_path=input_path,
+        output_path=output_path,
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "repair"},
+    )
+
+    with pytest.raises(RuntimeError, match="qpdf exited with code 2"):
+        await PDFEngine().convert(task)
+
+
+def test_pdf_engine_supports_html_output() -> None:
+    engine = PDFEngine()
+
+    assert engine.supports("pdf", "html")
