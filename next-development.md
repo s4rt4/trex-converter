@@ -50,11 +50,11 @@ Tujuan: ekspos kemampuan ImageMagick di luar resize/quality/strip dasar.
 
 Pisahkan dari Video supaya alur pengguna fokus.
 
-- [ ] Audio extract dari video (mp3/wav/flac/opus/aac)
-- [ ] Format convert antar codec audio
-- [ ] Loudness normalize (EBU R128 `loudnorm`) atau peak normalize
-- [ ] Trim, fade in/out, gain
-- [ ] Stereo↔mono, sample-rate / bitrate convert
+- [x] Audio extract dari video (mp3/wav/flac/opus/aac/m4a/ogg) — full matrix video → audio
+- [x] Format convert antar codec audio (mp3/wav/aac/flac/m4a/opus/ogg)
+- [x] Loudness normalize (EBU R128 `loudnorm`) atau peak normalize — loudnorm I=-16/TP=-1.5/LRA=11
+- [x] Trim, fade in/out, gain — gain ±20 dB, fade-in/out via `afade`
+- [x] Stereo↔mono, sample-rate / bitrate convert — `-ac` 1/2, `-ar` 22.05k/44.1k/48k/96k, bitrate via main form
 - [ ] Merge / mix multi-track
 - [ ] Tag editor ID3 (title/artist/album/cover art)
 - [ ] Vocal remove sederhana (center-channel cancel)
@@ -125,3 +125,4 @@ ROI tertinggi karena tool gratis dan use-case-nya luas.
 - 2026-05-04 — Roadmap dibuat. Image module gelombang 1 selesai: transform, color, filter, watermark teks, border/frame, density, ICO auto-resize. UI panel `ImageOptionsPanel` di-mount ke Image page via hook `extra_options_factory` baru di `ConversionPageConfig`. Test suite naik dari 20 ke 29 passed. Item lanjutan image (watermark gambar, ICC profile, animated optimize, montage, EXIF granular, fit-to-canvas, batch drag-drop) tertunda untuk gelombang berikutnya.
 - 2026-05-04 — PDF Tools gelombang 1 selesai: extract pages (range syntax), rotate, compress, encrypt/decrypt AES-256, strip metadata, watermark teks (gravity 9-arah + opacity). Engine `PDFEngine` diperluas, panel `PDFOperationsPanel` 5-tab (Pages / Security / Compress / Watermark / Metadata) di-mount ke PDF Tools page lewat `extra_options_factory`. Routing `pdf→pdf` dan `pdf→txt` pindah dari Tesseract ke PDFEngine. Dependency checker mendukung prefix `python:` untuk modul Python. Test suite naik dari 29 ke 45 passed (16 tes baru untuk operasi PDF). Sidebar dapat halaman Dashboard dan About; setiap halaman konversi sekarang punya tab `Convert` / `Queue` dan queue panel dapat thumbnail file.
 - 2026-05-04 — Video Module gelombang 1 selesai: trim (start/end), resolution preset 4K/1440p/1080p/720p/480p/360p, compress (CRF + libx264 preset), rotate (0/90/180/270), flip H/V, free crop `WxH+X+Y`, speed change 0.5x–2.0x (setpts + atempo), watermark teks via drawtext (gravity 9-arah, size, opacity). Filter chain order: crop → transpose → flip → scale → setpts → drawtext. Engine `FFmpegEngine` SUPPORTED_PAIRS diperluas ke matrix mp4/mov/mkv/webm + audio extract; registry sekarang generate ffmpeg pairs dari engine constant. Panel `VideoOptionsPanel` 5-tab (Trim / Transform / Resize / Compress / Watermark) di-mount ke Video page. Bug `_output_belongs_to_page` PDF yang menyembunyikan output `pdf` dari combo (akibatnya semua operasi PDF Tools tidak bisa di-trigger dari UI) ikut diperbaiki. Test suite naik dari 45 ke 74 passed (29 tes baru untuk arg builder FFmpeg).
+- 2026-05-04 — Audio Module gelombang 1 selesai: trim (start/end), fade-in/out via `afade`, gain ±20 dB via `volume`, loudness normalize (`loudnorm` EBU R128), channel down-mix (`-ac` 1/2), sample-rate convert (`-ar` 22.05k/44.1k/48k/96k), full audio format matrix (mp3/wav/aac/flac/m4a/opus/ogg) plus video → audio extract. Audio filter chain order: atempo → afade-in → afade-out → volume → loudnorm. Panel `AudioOptionsPanel` 3-tab (Trim / Effects / Output) ditambah; sidebar dapat entri Audio (ikon `fa5s.music`). Video page di-trim ke output video-only (mp4/mov/mkv/webm) untuk hindari overlap dengan Audio page. Test suite naik dari 74 ke 85 passed (11 tes baru untuk filter audio + supports).

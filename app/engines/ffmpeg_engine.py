@@ -9,12 +9,12 @@ from app.engines.base import BaseEngine, EngineCapabilities
 
 
 VIDEO_FORMATS = ("mp4", "mov", "webm", "mkv")
-AUDIO_OUT_FROM_VIDEO = ("mp3", "wav", "aac")
+AUDIO_FORMATS = ("mp3", "wav", "aac", "flac", "m4a", "opus", "ogg")
 
 SUPPORTED_PAIRS = (
     {(fmt_in, fmt_out) for fmt_in in VIDEO_FORMATS for fmt_out in VIDEO_FORMATS}
-    | {(fmt_in, fmt_out) for fmt_in in VIDEO_FORMATS for fmt_out in AUDIO_OUT_FROM_VIDEO}
-    | {("wav", "mp3"), ("flac", "mp3"), ("mp3", "wav")}
+    | {(fmt_in, fmt_out) for fmt_in in VIDEO_FORMATS for fmt_out in AUDIO_FORMATS}
+    | {(fmt_in, fmt_out) for fmt_in in AUDIO_FORMATS for fmt_out in AUDIO_FORMATS}
 )
 
 RESOLUTION_PRESETS = {
@@ -47,7 +47,7 @@ GRAVITY_DRAWTEXT_POS = {
     "south": ("(w-text_w)/2", "h-text_h-20"),
     "southeast": ("w-text_w-20", "h-text_h-20"),
 }
-AUDIO_OUTPUT_FORMATS = {"mp3", "wav", "aac", "flac", "m4a", "opus", "ogg"}
+AUDIO_OUTPUT_FORMATS = set(AUDIO_FORMATS)
 
 _DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)")
 _CROP_FREE_RE = re.compile(r"^(\d+)x(\d+)\+(\d+)\+(\d+)$")
@@ -189,10 +189,40 @@ def _audio_filter_chain(options: dict, *, drop_audio: bool) -> str:
     if drop_audio:
         return ""
     filters: list[str] = []
+
     speed = _float_option(options.get("speed"))
     if speed and speed > 0 and abs(speed - 1.0) > 1e-3:
         filters.extend(_atempo_chain(speed))
+
+    fade_in = _float_option(options.get("fade_in_duration"))
+    if fade_in and fade_in > 0:
+        filters.append(f"afade=t=in:st=0:d={_format_seconds(fade_in)}")
+
+    fade_out_duration = _float_option(options.get("fade_out_duration"))
+    fade_out_start = _float_option(options.get("fade_out_start"))
+    if fade_out_duration and fade_out_duration > 0:
+        if fade_out_start is None or fade_out_start < 0:
+            raise RuntimeError(
+                "fade_out_duration requires fade_out_start (seconds from clip start)"
+            )
+        filters.append(
+            f"afade=t=out:st={_format_seconds(fade_out_start)}:d={_format_seconds(fade_out_duration)}"
+        )
+
+    volume_db = _float_option(options.get("volume_db"))
+    if volume_db is not None and abs(volume_db) > 1e-3:
+        sign = "+" if volume_db > 0 else ""
+        filters.append(f"volume={sign}{_format_seconds(volume_db)}dB")
+
+    if options.get("loudnorm"):
+        filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
+
     return ",".join(filters)
+
+
+def _format_seconds(value: float) -> str:
+    text = f"{value:.6f}".rstrip("0").rstrip(".")
+    return text or "0"
 
 
 def _atempo_chain(speed: float) -> list[str]:
@@ -266,6 +296,10 @@ def _codec_options(task: Task) -> list[str]:
     sample_rate = task.options.get("sample_rate")
     if sample_rate:
         options.extend(["-ar", str(sample_rate)])
+
+    channels = task.options.get("audio_channels")
+    if channels:
+        options.extend(["-ac", str(channels)])
 
     video_codec = task.options.get("video_codec")
     if video_codec:

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added an Audio sidebar page with a tabbed `AudioOptionsPanel` (Trim / Effects / Output) covering trim, fade-in/out (`afade`), gain ±20 dB (`volume`), loudness normalize (EBU R128 `loudnorm`), channel down-mix (`-ac`), and sample-rate convert (`-ar`).
+- Expanded FFmpeg supported pairs to a full audio↔audio matrix (mp3/wav/aac/flac/m4a/opus/ogg) plus video→audio extraction across mp4/mov/mkv/webm sources.
+- Video page now restricted to video outputs only (mp4/mov/mkv/webm); audio extraction is handled by the new Audio page to keep workflows focused.
 - Expanded the FFmpeg engine with trim (start/end), resolution presets (4K/1440p/1080p/720p/480p/360p), compress (CRF + libx264 preset), rotate (90/180/270), flip H/V, free crop, speed change 0.5x–2.0x (setpts + atempo), and text watermark via drawtext with 9-position gravity and opacity.
 - Added a tabbed `VideoOptionsPanel` to the Video page (Trim / Transform / Resize / Compress / Watermark).
 - Expanded FFmpeg supported format pairs to a full mp4/mov/mkv/webm matrix plus video-to-audio extract; registry derives ffmpeg routing from the engine's `SUPPORTED_PAIRS`.

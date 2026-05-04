@@ -286,3 +286,120 @@ def test_audio_filter_set_only_when_speed_changes() -> None:
     command = _build({"watermark_text": "x"})
 
     assert "-af" not in command
+
+
+def test_supports_audio_to_audio_pairs() -> None:
+    engine = FFmpegEngine()
+
+    assert engine.supports("mp3", "mp3")
+    assert engine.supports("flac", "wav")
+    assert engine.supports("ogg", "opus")
+    assert engine.supports("m4a", "mp3")
+    assert engine.supports("mp4", "flac")  # extract from video
+    assert engine.supports("webm", "ogg")
+
+
+def test_volume_db_emits_filter_with_sign() -> None:
+    command_up = _build({"volume_db": 6}, format_in="mp3", format_out="mp3")
+    command_down = _build({"volume_db": -3.5}, format_in="mp3", format_out="mp3")
+
+    af_up = command_up[command_up.index("-af") + 1]
+    af_down = command_down[command_down.index("-af") + 1]
+    assert af_up == "volume=+6dB"
+    assert af_down == "volume=-3.5dB"
+
+
+def test_volume_db_zero_does_not_emit_filter() -> None:
+    command = _build({"volume_db": 0}, format_in="mp3", format_out="mp3")
+
+    assert "-af" not in command
+
+
+def test_fade_in_emits_afade() -> None:
+    command = _build({"fade_in_duration": 2.5}, format_in="mp3", format_out="mp3")
+
+    af = command[command.index("-af") + 1]
+    assert af == "afade=t=in:st=0:d=2.5"
+
+
+def test_fade_out_requires_start_when_duration_set() -> None:
+    with pytest.raises(RuntimeError, match="fade_out_start"):
+        _build({"fade_out_duration": 3}, format_in="mp3", format_out="mp3")
+
+
+def test_fade_out_emits_afade_with_start() -> None:
+    command = _build(
+        {"fade_out_duration": 3, "fade_out_start": 117},
+        format_in="mp3",
+        format_out="mp3",
+    )
+
+    af = command[command.index("-af") + 1]
+    assert af == "afade=t=out:st=117:d=3"
+
+
+def test_loudnorm_appended_at_end_of_chain() -> None:
+    command = _build(
+        {"volume_db": 4, "loudnorm": True},
+        format_in="mp3",
+        format_out="mp3",
+    )
+
+    af = command[command.index("-af") + 1]
+    chain = af.split(",")
+    assert chain[0].startswith("volume=")
+    assert chain[1].startswith("loudnorm=")
+
+
+def test_audio_filter_chain_order() -> None:
+    command = _build(
+        {
+            "speed": 1.25,
+            "fade_in_duration": 1,
+            "fade_out_duration": 2,
+            "fade_out_start": 60,
+            "volume_db": -2,
+            "loudnorm": True,
+        },
+        format_in="mp3",
+        format_out="mp3",
+    )
+
+    af = command[command.index("-af") + 1]
+    chain = af.split(",")
+    assert chain[0].startswith("atempo=")
+    assert chain[1].startswith("afade=t=in")
+    assert chain[2].startswith("afade=t=out")
+    assert chain[3].startswith("volume=")
+    assert chain[4].startswith("loudnorm=")
+
+
+def test_audio_channels_emits_ac_flag() -> None:
+    command = _build({"audio_channels": "1"}, format_in="mp3", format_out="mp3")
+
+    assert command[command.index("-ac") + 1] == "1"
+
+
+def test_sample_rate_emits_ar_flag() -> None:
+    command = _build({"sample_rate": "44100"}, format_in="mp3", format_out="mp3")
+
+    assert command[command.index("-ar") + 1] == "44100"
+
+
+def test_audio_output_skips_video_filters_but_keeps_audio_filters() -> None:
+    command = _build(
+        {
+            "rotation_degrees": 90,
+            "resolution_preset": "1080p",
+            "watermark_text": "x",
+            "volume_db": 5,
+            "fade_in_duration": 1,
+        },
+        format_in="mp4",
+        format_out="mp3",
+    )
+
+    assert "-vf" not in command
+    af = command[command.index("-af") + 1]
+    assert "volume=" in af
+    assert "afade=t=in" in af
