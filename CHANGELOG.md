@@ -4,6 +4,7 @@
 
 - Reworked the main UI into a sidebar layout with separate Image, Video, Document, and PDF Tools pages.
 - Added category-specific task forms and filtered task queues per page.
+- Added real async LibreOffice document-to-PDF conversion with timeout, cancel, and output renaming.
 
 ## 0.3.0
 

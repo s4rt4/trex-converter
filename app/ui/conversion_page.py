@@ -21,6 +21,7 @@ try:
         QHBoxLayout,
         QLabel,
         QLineEdit,
+        QListView,
         QMessageBox,
         QPushButton,
         QSlider,
@@ -30,7 +31,7 @@ try:
     )
 except ImportError:  # pragma: no cover
     Qt = None
-    QCheckBox = QComboBox = QFileDialog = QFormLayout = QFrame = QHBoxLayout = QLabel = QLineEdit = QMessageBox = QPushButton = QSlider = QToolButton = QVBoxLayout = QWidget = None
+    QCheckBox = QComboBox = QFileDialog = QFormLayout = QFrame = QHBoxLayout = QLabel = QLineEdit = QListView = QMessageBox = QPushButton = QSlider = QToolButton = QVBoxLayout = QWidget = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +95,8 @@ class ConversionPage(QWidget):
         output_format_row.setSpacing(0)
         self.output_combo = QComboBox(form_shell)
         self.output_combo.setObjectName("OutputFormatCombo")
+        self.output_combo.setView(QListView(self.output_combo))
+        self.output_combo.setMaxVisibleItems(12)
         self.output_combo.currentTextChanged.connect(self._update_output_path)
         output_format_button = QToolButton(form_shell)
         output_format_button.setObjectName("OutputFormatButton")

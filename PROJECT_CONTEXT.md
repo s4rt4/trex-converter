@@ -24,7 +24,8 @@ Sudah ada:
 - Dependency checker untuk binary system.
 - FFmpeg engine nyata dengan progress parsing dan cancel subprocess.
 - ImageMagick engine nyata dengan opsi `resize`, `quality`, dan `strip`.
-- Stub engine untuk LibreOffice, PDF, dan OCR.
+- LibreOffice engine nyata untuk document-to-PDF dengan timeout dan cancel subprocess.
+- Stub engine untuk PDF dan OCR.
 - UI PySide6 dengan sidebar.
 - Icon pack `qtawesome`.
 - App logo SVG and hicolor PNG icon assets.
@@ -108,6 +109,7 @@ Icon sudah dipakai di:
 - `app/data/database.py`: SQLite task repository.
 - `app/engines/ffmpeg_engine.py`: real FFmpeg engine.
 - `app/engines/imagemagick_engine.py`: real ImageMagick engine and image format list.
+- `app/engines/libreoffice_engine.py`: real LibreOffice document-to-PDF engine.
 - `assets/trex-logo.svg`: source app logo.
 - `assets/icons/hicolor/`: generated app icons for desktop packaging.
 
@@ -136,7 +138,7 @@ cd /home/sarta/Downloads/trex-converter
 Current expected result:
 
 ```text
-15 passed
+17 passed
 ```
 
 ## System Dependencies
@@ -171,7 +173,6 @@ Development dependencies:
 ## Next Likely Work
 
 Useful next tasks:
-- Implement real LibreOffice engine for document to PDF.
 - Implement real PDF tools with QPDF/PyMuPDF.
 - Add settings page for default output directory and concurrency.
 - Improve queue filtering/history UI.

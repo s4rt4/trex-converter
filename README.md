@@ -14,6 +14,7 @@ Implemented:
 - Engine abstraction plus stub engine untuk LibreOffice, PDF, dan OCR.
 - FFmpeg engine dasar via `asyncio.create_subprocess_exec`, progress parser, cancel, dan option audio/video sederhana.
 - ImageMagick engine dasar via `asyncio.create_subprocess_exec`, dengan opsi `resize`, `quality`, dan `strip`.
+- LibreOffice engine dasar via `asyncio.create_subprocess_exec` untuk document-to-PDF, timeout, cancel, dan output renaming.
 - SQLite task repository untuk history dan resume pending/running task.
 - UI skeleton terhubung ke queue: progress bar per task, tombol cancel dan retry.
 - App logo SVG plus hicolor PNG assets untuk integrasi desktop Debian.

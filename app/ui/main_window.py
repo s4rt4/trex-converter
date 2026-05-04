@@ -8,6 +8,7 @@ from app.core.registry import ConversionRegistry
 from app.core.task import Task
 from app.data.database import TaskRepository
 from app.engines.imagemagick_engine import IMAGE_FORMATS
+from app.engines.libreoffice_engine import SUPPORTED_INPUT_FORMATS
 from app.ui.conversion_page import ConversionPage, ConversionPageConfig
 from app.ui.icons import ICON_SIZE, accent_icon, app_icon, icon, surface_icon
 from app.ui.theme import (
@@ -62,7 +63,7 @@ PAGE_CONFIGS = (
     ),
     ConversionPageConfig(
         title="Document",
-        input_formats=("docx", "xlsx", "pptx", "odt"),
+        input_formats=tuple(sorted(SUPPORTED_INPUT_FORMATS)),
         default_output="pdf",
         engine_name="libreoffice",
         kind="document",
@@ -286,6 +287,23 @@ class MainWindow(QMainWindow):
             QComboBox::drop-down {
                 border: 0;
                 width: 0;
+            }
+            QComboBox QAbstractItemView {
+                background: $BRAND_SURFACE;
+                color: $BRAND_TEXT;
+                border: 1px solid $BRAND_ACCENT;
+                selection-background-color: $BRAND_DARK;
+                selection-color: $BRAND_SURFACE;
+                outline: 0;
+                padding: 4px;
+            }
+            QComboBox QAbstractItemView::item {
+                min-height: 26px;
+                padding: 4px 8px;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background: $BRAND_DARK;
+                color: $BRAND_SURFACE;
             }
             #OutputFormatButton {
                 background: $BRAND_DARK;
