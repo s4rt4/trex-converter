@@ -14,6 +14,7 @@ from app.ui.conversion_page import ConversionPage, ConversionPageConfig
 from app.ui.dashboard_page import DashboardPage
 from app.ui.image_options import ImageOptionsPanel
 from app.ui.pdf_operations import PDFOperationsPanel
+from app.ui.video_options import VideoOptionsPanel
 from app.ui.icons import ICON_SIZE, accent_icon, app_icon, icon, surface_icon
 from app.ui.theme import (
     BRAND_ACCENT,
@@ -60,11 +61,12 @@ PAGE_CONFIGS = (
     ),
     ConversionPageConfig(
         title="Video",
-        input_formats=("mp4", "mov", "wav", "flac"),
-        default_output="mp3",
+        input_formats=("mp4", "mov", "mkv", "webm", "wav", "flac", "mp3"),
+        default_output="mp4",
         engine_name="ffmpeg",
         kind="video",
         show_bitrate=True,
+        extra_options_factory=VideoOptionsPanel,
     ),
     ConversionPageConfig(
         title="Document",
@@ -392,24 +394,28 @@ class MainWindow(QMainWindow):
                 background: $BRAND_SURFACE_SOFT;
             }
             #ImageOptionsTabs,
-            #PDFOperationsTabs {
+            #PDFOperationsTabs,
+            #VideoOptionsTabs {
                 background: transparent;
                 border: 0;
             }
             #ImageOptionsTabs::pane,
-            #PDFOperationsTabs::pane {
+            #PDFOperationsTabs::pane,
+            #VideoOptionsTabs::pane {
                 background: $BRAND_SURFACE_SOFT;
                 border: 1px solid rgba(86, 182, 198, 145);
                 border-radius: 8px;
                 top: 10px;
             }
             #ImageOptionsTabs QTabBar,
-            #PDFOperationsTabs QTabBar {
+            #PDFOperationsTabs QTabBar,
+            #VideoOptionsTabs QTabBar {
                 background: transparent;
                 border: 0;
             }
             #ImageOptionsTabs QTabBar::tab,
-            #PDFOperationsTabs QTabBar::tab {
+            #PDFOperationsTabs QTabBar::tab,
+            #VideoOptionsTabs QTabBar::tab {
                 background: rgba(228, 215, 189, 150);
                 color: $BRAND_DARK;
                 border: 1px solid rgba(86, 182, 198, 145);
@@ -419,28 +425,33 @@ class MainWindow(QMainWindow):
                 font-weight: 650;
             }
             #ImageOptionsTabs QTabBar::tab:selected,
-            #PDFOperationsTabs QTabBar::tab:selected {
+            #PDFOperationsTabs QTabBar::tab:selected,
+            #VideoOptionsTabs QTabBar::tab:selected {
                 background: $BRAND_DARK;
                 color: $BRAND_ACCENT;
                 border: 1px solid $BRAND_DARK;
             }
             #ImageOptionsTabs QTabBar::tab:hover:!selected,
-            #PDFOperationsTabs QTabBar::tab:hover:!selected {
+            #PDFOperationsTabs QTabBar::tab:hover:!selected,
+            #VideoOptionsTabs QTabBar::tab:hover:!selected {
                 background: $BRAND_SURFACE_SOFT;
             }
             #ImageOptionsPanel QWidget,
-            #PDFOperationsPanel QWidget {
+            #PDFOperationsPanel QWidget,
+            #VideoOptionsPanel QWidget {
                 background: $BRAND_SURFACE_SOFT;
             }
             #ImageOptionsPanel QSlider::groove:horizontal,
-            #PDFOperationsPanel QSlider::groove:horizontal {
+            #PDFOperationsPanel QSlider::groove:horizontal,
+            #VideoOptionsPanel QSlider::groove:horizontal {
                 background: $BRAND_SURFACE_MUTED;
                 border: 1px solid $BRAND_ACCENT;
                 border-radius: 4px;
                 height: 8px;
             }
             #ImageOptionsPanel QSlider::handle:horizontal,
-            #PDFOperationsPanel QSlider::handle:horizontal {
+            #PDFOperationsPanel QSlider::handle:horizontal,
+            #VideoOptionsPanel QSlider::handle:horizontal {
                 background: $BRAND_DARK;
                 border: 2px solid $BRAND_ACCENT;
                 border-radius: 8px;

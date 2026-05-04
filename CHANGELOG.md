@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Expanded the FFmpeg engine with trim (start/end), resolution presets (4K/1440p/1080p/720p/480p/360p), compress (CRF + libx264 preset), rotate (90/180/270), flip H/V, free crop, speed change 0.5x–2.0x (setpts + atempo), and text watermark via drawtext with 9-position gravity and opacity.
+- Added a tabbed `VideoOptionsPanel` to the Video page (Trim / Transform / Resize / Compress / Watermark).
+- Expanded FFmpeg supported format pairs to a full mp4/mov/mkv/webm matrix plus video-to-audio extract; registry derives ffmpeg routing from the engine's `SUPPORTED_PAIRS`.
+- Fixed PDF Tools page output-format filter that previously hid the `pdf` output, blocking every PDF→PDF operation from the UI.
 - Reworked the main UI into a sidebar layout with separate Image, Video, Document, and PDF Tools pages.
 - Added category-specific task forms and filtered task queues per page.
 - Added real async LibreOffice document-to-PDF conversion with timeout, cancel, and output renaming.

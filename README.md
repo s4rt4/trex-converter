@@ -12,7 +12,7 @@ Implemented:
 - Dependency checker berbasis `PATH`.
 - Registry untuk routing format ke engine.
 - Engine abstraction plus stub engine untuk OCR.
-- FFmpeg engine dasar via `asyncio.create_subprocess_exec`, progress parser, cancel, dan option audio/video sederhana.
+- FFmpeg engine via `asyncio.create_subprocess_exec` dengan progress parser, cancel, trim (start/end), resolution preset 4K/1440p/1080p/720p/480p/360p, compress (CRF + libx264 preset), rotate, flip H/V, free crop, speed change 0.5x–2.0x, dan watermark teks (drawtext, gravity 9-arah + opacity).
 - ImageMagick engine lengkap dengan transform (rotate/flip/flop/trim/crop/aspect crop), resize modes (dimension/longest-edge/percent/megapixel), color (grayscale/sepia/negate/normalize/brightness/contrast/gamma), filter (blur/sharpen/denoise/vignette), border & frame, text watermark, density, dan ICO multi-resolution.
 - LibreOffice engine dasar via `asyncio.create_subprocess_exec` untuk document-to-PDF, timeout, cancel, dan output renaming.
 - PDF engine via PyMuPDF: render halaman ke PNG/JPG, ekstrak teks ke TXT, plus operasi PDF→PDF (extract pages dengan range syntax, rotate, compress, encrypt/decrypt AES-256, strip metadata, watermark teks dengan 9-position gravity dan opacity).

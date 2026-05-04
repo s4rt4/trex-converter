@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.engines.base import BaseEngine
-from app.engines.ffmpeg_engine import FFmpegEngine
+from app.engines.ffmpeg_engine import FFmpegEngine, SUPPORTED_PAIRS as FFMPEG_PAIRS
 from app.engines.imagemagick_engine import IMAGE_FORMATS, ImageMagickEngine
 from app.engines.libreoffice_engine import LibreOfficeEngine, SUPPORTED_INPUT_FORMATS
 from app.engines.ocr_engine import TesseractOCREngine
@@ -80,12 +80,11 @@ def default_entries() -> list[RegistryEntry]:
         (format_in, "pdf", "libreoffice", LibreOfficeEngine)
         for format_in in SUPPORTED_INPUT_FORMATS
     ]
+    ffmpeg_pairs = [
+        (format_in, format_out, "ffmpeg", FFmpegEngine)
+        for format_in, format_out in sorted(FFMPEG_PAIRS)
+    ]
     mapping: list[tuple[str, str, str, type[BaseEngine]]] = [
-        ("mp4", "mp3", "ffmpeg", FFmpegEngine),
-        ("mp4", "webm", "ffmpeg", FFmpegEngine),
-        ("mov", "mp4", "ffmpeg", FFmpegEngine),
-        ("wav", "mp3", "ffmpeg", FFmpegEngine),
-        ("flac", "mp3", "ffmpeg", FFmpegEngine),
         *[
             ("pdf", format_out, "pdf", PDFEngine)
             for format_out in PDF_IMAGE_FORMATS
@@ -95,7 +94,7 @@ def default_entries() -> list[RegistryEntry]:
         ("png", "txt", "tesseract", TesseractOCREngine),
         ("jpg", "txt", "tesseract", TesseractOCREngine),
         ("jpeg", "txt", "tesseract", TesseractOCREngine),
-    ] + document_pairs + image_pairs
+    ] + ffmpeg_pairs + document_pairs + image_pairs
     return [
         RegistryEntry(
             format_in=normalize_format(format_in),
