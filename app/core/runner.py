@@ -13,4 +13,5 @@ def create_default_queue(max_concurrency: int = 2, persistent: bool = True) -> T
         max_concurrency=max_concurrency,
         repository=repository,
         resume_pending=persistent,
+        engine_by_name=registry.engine_by_name,
     )

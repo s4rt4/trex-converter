@@ -9,6 +9,7 @@ from app.engines.base import BaseEngine
 
 TaskEventCallback = Callable[[Task], None | Awaitable[None]]
 EngineResolver = Callable[[str, str], BaseEngine]
+EngineByName = Callable[[str], BaseEngine]
 
 
 class TaskQueue:
@@ -18,10 +19,12 @@ class TaskQueue:
         max_concurrency: int = 2,
         repository: TaskRepository | None = None,
         resume_pending: bool = False,
+        engine_by_name: EngineByName | None = None,
     ) -> None:
         if max_concurrency < 1:
             raise ValueError("max_concurrency must be at least 1")
         self._engine_resolver = engine_resolver
+        self._engine_by_name = engine_by_name
         self._max_concurrency = max_concurrency
         self._tasks: dict[str, Task] = {}
         self._pending: asyncio.Queue[str] = asyncio.Queue()
@@ -125,7 +128,7 @@ class TaskQueue:
 
     async def _run_task(self, task: Task) -> None:
         try:
-            engine = self._engine_resolver(task.format_in, task.format_out)
+            engine = self._resolve_engine(task)
             self._running_engines[task.id] = engine
             task.mark_running()
             self._persist(task)
@@ -145,6 +148,14 @@ class TaskQueue:
             self._running_engines.pop(task.id, None)
             self._persist(task)
             await self._emit(task)
+
+    def _resolve_engine(self, task: Task) -> BaseEngine:
+        if self._engine_by_name and task.engine:
+            try:
+                return self._engine_by_name(task.engine)
+            except KeyError:
+                pass
+        return self._engine_resolver(task.format_in, task.format_out)
 
     async def _emit(self, task: Task) -> None:
         for callback in self._callbacks:

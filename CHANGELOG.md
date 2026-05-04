@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replaced the Tesseract OCR stub with a real engine: image (png/jpg/jpeg/tif/tiff/bmp) → searchable PDF, TXT, hOCR, or TSV with multi-language picker (eng/ind/eng+ind plus custom), PSM (13 modes), and OEM (4 modes).
+- Added an OCR sidebar page with a single-pane `OCROptionsPanel`; the new `force_engine` flag on `ConversionPageConfig` plus `ConversionRegistry.engine_by_name` and a `TaskQueue.engine_by_name` resolver lets the OCR page route png→pdf to Tesseract while the Image page keeps routing png→pdf to ImageMagick.
 - Added an Audio sidebar page with a tabbed `AudioOptionsPanel` (Trim / Effects / Output) covering trim, fade-in/out (`afade`), gain ±20 dB (`volume`), loudness normalize (EBU R128 `loudnorm`), channel down-mix (`-ac`), and sample-rate convert (`-ar`).
 - Expanded FFmpeg supported pairs to a full audio↔audio matrix (mp3/wav/aac/flac/m4a/opus/ogg) plus video→audio extraction across mp4/mov/mkv/webm sources.
 - Video page now restricted to video outputs only (mp4/mov/mkv/webm); audio extraction is handled by the new Audio page to keep workflows focused.

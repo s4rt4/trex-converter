@@ -14,6 +14,7 @@ from app.ui.conversion_page import ConversionPage, ConversionPageConfig
 from app.ui.dashboard_page import DashboardPage
 from app.ui.audio_options import AudioOptionsPanel
 from app.ui.image_options import ImageOptionsPanel
+from app.ui.ocr_options import OCROptionsPanel
 from app.ui.pdf_operations import PDFOperationsPanel
 from app.ui.video_options import VideoOptionsPanel
 from app.ui.icons import ICON_SIZE, accent_icon, app_icon, icon, surface_icon
@@ -87,6 +88,15 @@ PAGE_CONFIGS = (
         default_output="pdf",
         engine_name="libreoffice",
         kind="document",
+    ),
+    ConversionPageConfig(
+        title="OCR",
+        input_formats=("png", "jpg", "jpeg", "tif", "tiff", "bmp"),
+        default_output="txt",
+        engine_name="tesseract",
+        kind="ocr",
+        force_engine=True,
+        extra_options_factory=OCROptionsPanel,
     ),
     ConversionPageConfig(
         title="PDF Tools",
@@ -413,6 +423,11 @@ class MainWindow(QMainWindow):
                 background: transparent;
                 border: 0;
             }
+            #OCROptionsPanel {
+                background: $BRAND_SURFACE_SOFT;
+                border: 1px solid rgba(86, 182, 198, 145);
+                border-radius: 8px;
+            }
             #ImageOptionsTabs::pane,
             #PDFOperationsTabs::pane,
             #VideoOptionsTabs::pane,
@@ -458,7 +473,9 @@ class MainWindow(QMainWindow):
             #ImageOptionsPanel QWidget,
             #PDFOperationsPanel QWidget,
             #VideoOptionsPanel QWidget,
-            #AudioOptionsPanel QWidget {
+            #AudioOptionsPanel QWidget,
+            #OCROptionsPanel,
+            #OCROptionsPanel QWidget {
                 background: $BRAND_SURFACE_SOFT;
             }
             #ImageOptionsPanel QSlider::groove:horizontal,
@@ -688,6 +705,7 @@ def _page_icon(kind: str):
         "image": "fa5s.image",
         "video": "fa5s.video",
         "audio": "fa5s.music",
+        "ocr": "fa5s.font",
         "document": "fa5s.file-alt",
         "pdf": "fa5s.file-pdf",
         "dashboard": "fa5s.chart-pie",

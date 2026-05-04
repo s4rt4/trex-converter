@@ -46,6 +46,7 @@ class ConversionPageConfig:
     show_resize: bool = False
     show_bitrate: bool = False
     extra_options_factory: Callable[[QWidget], QWidget] | None = None
+    force_engine: bool = False
 
 
 class ConversionPage(QWidget):
@@ -271,14 +272,17 @@ class ConversionPage(QWidget):
             QMessageBox.warning(self, "Output Required", "No output format is available for this input.")
             return
         output_path = Path(self.output_display.text())
-        engine = self.registry.resolve(self._input_path.suffix, format_out)
+        if self.config.force_engine:
+            engine_name = self.config.engine_name
+        else:
+            engine_name = self.registry.resolve(self._input_path.suffix, format_out).name
         self._on_enqueue(
             Task(
                 input_path=self._input_path,
                 output_path=output_path,
                 format_in=self._input_path.suffix,
                 format_out=format_out,
-                engine=engine.name,
+                engine=engine_name,
                 options=self._options(),
             )
         )
@@ -317,6 +321,8 @@ class ConversionPage(QWidget):
             return output in {"pdf"}
         if self.config.kind == "pdf":
             return output in {*IMAGE_FORMATS, "txt", "pdf"}
+        if self.config.kind == "ocr":
+            return output in {"txt", "pdf", "hocr", "tsv"}
         return True
 
 

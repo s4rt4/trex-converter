@@ -55,6 +55,58 @@ async def test_retry_failed_task_requeues() -> None:
 
 
 @pytest.mark.asyncio
+async def test_engine_by_name_overrides_resolver() -> None:
+    fallback = StubEngine("ffmpeg", {("mp4", "mp3")}, "ffmpeg")
+    override = StubEngine("tesseract", {("mp4", "mp3")}, "tesseract")
+    by_name_calls: list[str] = []
+
+    def _by_name(name: str) -> StubEngine:
+        by_name_calls.append(name)
+        if name == "tesseract":
+            return override
+        raise KeyError(name)
+
+    queue = TaskQueue(
+        lambda _format_in, _format_out: fallback,
+        engine_by_name=_by_name,
+    )
+    task = Task(
+        input_path=Path("in.mp4"),
+        output_path=Path("out.mp3"),
+        format_in="mp4",
+        format_out="mp3",
+        engine="tesseract",
+    )
+
+    queue.add(task)
+    await queue.wait_idle()
+
+    assert task.status == TaskStatus.SUCCESS
+    assert by_name_calls == ["tesseract"]
+    await queue.close()
+
+
+@pytest.mark.asyncio
+async def test_engine_by_name_falls_back_when_unknown() -> None:
+    fallback = StubEngine("ffmpeg", {("mp4", "mp3")}, "ffmpeg")
+
+    def _by_name(name: str) -> StubEngine:
+        raise KeyError(name)
+
+    queue = TaskQueue(
+        lambda _format_in, _format_out: fallback,
+        engine_by_name=_by_name,
+    )
+    task = make_task()
+
+    queue.add(task)
+    await queue.wait_idle()
+
+    assert task.status == TaskStatus.SUCCESS
+    await queue.close()
+
+
+@pytest.mark.asyncio
 async def test_cancel_running_task_calls_engine_cancel() -> None:
     class SlowEngine(BaseEngine):
         name = "slow"

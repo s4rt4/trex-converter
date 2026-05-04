@@ -25,3 +25,32 @@ def test_registry_raises_for_unsupported_pair() -> None:
 def test_normalize_format_rejects_empty() -> None:
     with pytest.raises(ValueError):
         normalize_format(".")
+
+
+def test_registry_engine_by_name_returns_named_engine() -> None:
+    registry = ConversionRegistry()
+
+    assert registry.engine_by_name("tesseract").name == "tesseract"
+    assert registry.engine_by_name("imagemagick").name == "imagemagick"
+    assert registry.engine_by_name("ffmpeg").name == "ffmpeg"
+
+
+def test_registry_engine_by_name_raises_for_unknown() -> None:
+    registry = ConversionRegistry()
+
+    with pytest.raises(KeyError):
+        registry.engine_by_name("nope")
+
+
+def test_png_to_pdf_routes_to_imagemagick_by_default() -> None:
+    registry = ConversionRegistry()
+
+    # OCR has png->pdf too but image_pairs is listed first, so default is imagemagick.
+    # OCR page bypasses this via force_engine + engine_by_name lookup.
+    assert registry.resolve("png", "pdf").name == "imagemagick"
+
+
+def test_png_to_txt_routes_to_tesseract() -> None:
+    registry = ConversionRegistry()
+
+    assert registry.resolve("png", "txt").name == "tesseract"

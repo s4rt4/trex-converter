@@ -6,7 +6,11 @@ from app.engines.base import BaseEngine
 from app.engines.ffmpeg_engine import FFmpegEngine, SUPPORTED_PAIRS as FFMPEG_PAIRS
 from app.engines.imagemagick_engine import IMAGE_FORMATS, ImageMagickEngine
 from app.engines.libreoffice_engine import LibreOfficeEngine, SUPPORTED_INPUT_FORMATS
-from app.engines.ocr_engine import TesseractOCREngine
+from app.engines.ocr_engine import (
+    OCR_INPUT_FORMATS,
+    SUPPORTED_PAIRS as OCR_PAIRS,
+    TesseractOCREngine,
+)
 from app.engines.pdf_engine import PDF_IMAGE_FORMATS, PDFEngine
 
 
@@ -29,6 +33,12 @@ class ConversionRegistry:
             if (entry.format_in, entry.format_out) == normalized:
                 return self._get_engine(entry)
         raise KeyError(f"Unsupported conversion: {format_in} -> {format_out}")
+
+    def engine_by_name(self, name: str) -> BaseEngine:
+        for entry in self._entries:
+            if entry.engine_name == name:
+                return self._get_engine(entry)
+        raise KeyError(f"Unknown engine: {name}")
 
     def list_supported_outputs(self, format_in: str) -> list[str]:
         normalized = normalize_format(format_in)
@@ -84,6 +94,10 @@ def default_entries() -> list[RegistryEntry]:
         (format_in, format_out, "ffmpeg", FFmpegEngine)
         for format_in, format_out in sorted(FFMPEG_PAIRS)
     ]
+    ocr_pairs = [
+        (format_in, format_out, "tesseract", TesseractOCREngine)
+        for format_in, format_out in sorted(OCR_PAIRS)
+    ]
     mapping: list[tuple[str, str, str, type[BaseEngine]]] = [
         *[
             ("pdf", format_out, "pdf", PDFEngine)
@@ -91,10 +105,7 @@ def default_entries() -> list[RegistryEntry]:
         ],
         ("pdf", "pdf", "pdf", PDFEngine),
         ("pdf", "txt", "pdf", PDFEngine),
-        ("png", "txt", "tesseract", TesseractOCREngine),
-        ("jpg", "txt", "tesseract", TesseractOCREngine),
-        ("jpeg", "txt", "tesseract", TesseractOCREngine),
-    ] + ffmpeg_pairs + document_pairs + image_pairs
+    ] + ffmpeg_pairs + document_pairs + image_pairs + ocr_pairs
     return [
         RegistryEntry(
             format_in=normalize_format(format_in),
