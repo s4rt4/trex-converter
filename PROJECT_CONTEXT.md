@@ -29,8 +29,7 @@ Sudah ada:
 - Subtitle engine Python-pure: SRT ↔ VTT dengan time shift; engine `requires_binary=""` di-allow oleh DependencyChecker.
 - Settings dataclass + JSON persistence di `~/.config/trex-converter/settings.json`; di-consume runner (max_concurrency) dan conversion_page (output_dir).
 - ImageMagick engine nyata dengan opsi lengkap: transform (rotate, flip, flop, auto-trim, free crop, aspect crop), resize modes (dimension, longest edge, percent, megapixel), color (grayscale, sepia, negate, normalize, brightness, contrast, gamma), filter (blur, sharpen, denoise, vignette), border/frame, watermark teks dengan gravity dan opacity, density, dan ICO multi-resolution auto-resize.
-- LibreOffice engine nyata untuk document-to-PDF dengan timeout dan cancel subprocess.
-- PDF engine nyata via PyMuPDF: render halaman PDF ke PNG/JPG, ekstrak teks ke TXT, plus operasi PDF→PDF (extract pages dengan range syntax, rotate, compress, encrypt/decrypt AES-256, strip metadata, watermark teks dengan gravity 9-arah dan opacity).
+- PDF engine nyata via PyMuPDF + qpdf: render halaman PDF ke PNG/JPG, ekstrak ke TXT/HTML, plus operasi PDF→PDF (extract pages, reorder, rotate, compress, repair via qpdf, encrypt/decrypt AES-256, strip metadata, edit metadata, watermark teks gravity 9-arah).
 - UI PySide6 dengan sidebar.
 - Icon pack `qtawesome`.
 - App logo SVG and hicolor PNG icon assets.
@@ -119,7 +118,7 @@ Icon sudah dipakai di:
 - `app/core/queue.py`: async task queue.
 - `app/core/registry.py`: conversion registry.
 - `app/data/database.py`: SQLite task repository.
-- `app/engines/ffmpeg_engine.py`: real FFmpeg engine — trim, scale, transpose/flip, crop, setpts/atempo, drawtext watermark, plus codec/CRF/preset.
+- `app/engines/ffmpeg_engine.py`: real FFmpeg engine — video filter chain (crop → transpose → flip → scale → setpts → drawtext), audio filter chain (atempo → afade-in → afade-out → volume → vocal-remove pan → loudnorm), CRF + preset, ID3 metadata flags, channel/sample-rate.
 - `app/ui/video_options.py`: panel tabbed (Trim / Transform / Resize / Compress / Watermark) untuk Video page.
 - `app/ui/audio_options.py`: panel tabbed (Trim / Effects / Output) untuk Audio page.
 - `app/ui/ocr_options.py`: panel single-pane (Language / PSM / OEM) untuk OCR page.
@@ -128,9 +127,9 @@ Icon sudah dipakai di:
 - `app/core/settings.py`: Settings dataclass + JSON persistence + module-level cache.
 - `app/engines/subtitle_engine.py`: Python parser untuk SRT/VTT.
 - `app/engines/imagemagick_engine.py`: real ImageMagick engine and image format list.
-- `app/engines/libreoffice_engine.py`: real LibreOffice document-to-PDF engine.
-- `app/engines/pdf_engine.py`: real PyMuPDF engine — render to image, extract text, dan operasi PDF→PDF (extract/rotate/compress/encrypt/decrypt/strip-metadata/watermark-text).
-- `app/ui/pdf_operations.py`: panel tabbed (Pages / Security / Compress / Watermark / Metadata) untuk PDF Tools page.
+- `app/engines/libreoffice_engine.py`: real LibreOffice engine — full Document format matrix (text/spreadsheet/presentation, 52 pairs); helper `_find_converted_file` handles arbitrary output extension.
+- `app/engines/pdf_engine.py`: real PyMuPDF engine — render to image, extract to TXT/HTML, dan operasi PDF→PDF (extract_pages/reorder/rotate/compress/repair-via-qpdf/encrypt/decrypt/strip-metadata/edit-metadata/watermark-text).
+- `app/ui/pdf_operations.py`: panel tabbed (Pages / Security / Compress / Watermark / Metadata); Pages action combo includes Extract / Reorder / Rotate; Compress action combo includes Compress / Repair; Metadata action combo includes Strip / Edit + 5-field form.
 - `app/ui/dashboard_page.py`: dashboard summary and all-task queue.
 - `app/ui/about_page.py`: about page.
 - `assets/trex-logo.svg`: source app logo.
@@ -196,15 +195,17 @@ Development dependencies:
 
 ## Next Likely Work
 
-Roadmap lengkap ada di `next-development.md`. Highlight berikutnya:
-- PDF Tools lanjutan: merge, split, page reorder, watermark gambar, page numbering/Bates, metadata edit, repair (qpdf), PDF→DOCX/HTML/EPUB, extract embedded images/attachments, redaction.
-- OCR lanjutan: PDF → searchable PDF (render + tesseract per-page + stitch via PyMuPDF), auto-rotate halaman sebelum OCR.
-- Audio lanjutan: merge/mix multi-track, ID3 tag editor (title/artist/album/cover), vocal remove sederhana.
-- Video lanjutan: stream-copy trim, two-pass target-size compress, GIF/WebP creator, thumbnail/contact sheet, logo watermark overlay, subtitle burn-in/extract, hardware accel detect, reverse video, concat multi-file.
-- Document lanjutan: PPTX/ODP → PNG slides per-slide, PDF/A archival, password-protected PDF, bulk merge DOCX → 1 PDF.
-- Subtitle lanjutan: ASS support, merge multi-file, burn-in (FFmpeg).
-- Batch drag-and-drop multi-file.
-- Package `.deb` properly.
+Roadmap lengkap dengan checklist `[x]/[~]/[ ]` ada di `next-development.md`. Highlight item terbesar yang masih `[ ]`:
+- PDF Tools: merge, split, watermark gambar, page numbering/Bates, PDF→DOCX/EPUB, extract embedded images/attachments, redaction, A/B compare.
+- OCR: PDF input pipeline (render + tesseract per-page + stitch via PyMuPDF), auto-rotate halaman.
+- Audio: merge/mix multi-track, cover art (ID3 APIC), vocal remove sudah ada.
+- Video: stream-copy trim, two-pass target-size compress, GIF/WebP creator, thumbnail/contact sheet, logo watermark overlay, subtitle burn-in/extract, hardware accel detect, reverse, concat multi-file.
+- Document: PPTX→PNG slides, PDF/A archival, password-protected PDF, bulk merge.
+- Subtitle: ASS support, merge multi-file, burn-in (delegasi ke FFmpeg).
+- Modul baru §7: Ebook (Pandoc/Calibre), Archive (tar/zip/7z), QR/Barcode (qrencode + zbarimg), Metadata cross-cut (exiftool).
+- Cross-cutting §8: preview/details panel per task, batch drag-and-drop multi-file, preset save/load per modul, packaging `.deb` final.
+
+**Catatan arsitektur untuk fitur multi-input/multi-output**: PDF merge, video concat, audio mix, image montage, dan PDF split butuh refactor `Task` model dari single-input/single-output. Itu prasyarat besar yang belum dibuat.
 
 ## Codex Session Handoff
 
