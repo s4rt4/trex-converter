@@ -261,7 +261,15 @@ class ConversionPage(QWidget):
     def _update_output_path(self) -> None:
         if not self._input_path or not self.output_combo.currentText():
             return
-        self.output_display.setText(str(self._input_path.with_suffix(f".{self.output_combo.currentText()}")))
+        from app.core.settings import get_settings
+
+        suffix = self.output_combo.currentText()
+        output_dir = get_settings().output_dir.strip()
+        if output_dir:
+            target = Path(output_dir) / f"{self._input_path.stem}.{suffix}"
+        else:
+            target = self._input_path.with_suffix(f".{suffix}")
+        self.output_display.setText(str(target))
 
     def _enqueue(self) -> None:
         if not self._input_path:
@@ -318,11 +326,17 @@ class ConversionPage(QWidget):
         if self.config.kind == "audio":
             return output in {"mp3", "wav", "aac", "flac", "m4a", "opus", "ogg"}
         if self.config.kind == "document":
-            return output in {"pdf"}
+            return output in {
+                "docx", "odt", "rtf", "html", "epub", "txt", "pdf",
+                "xlsx", "ods", "csv",
+                "pptx", "odp",
+            }
         if self.config.kind == "pdf":
             return output in {*IMAGE_FORMATS, "txt", "pdf"}
         if self.config.kind == "ocr":
             return output in {"txt", "pdf", "hocr", "tsv"}
+        if self.config.kind == "subtitle":
+            return output in {"srt", "vtt"}
         return True
 
 

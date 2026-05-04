@@ -25,6 +25,9 @@ Sudah ada:
 - FFmpeg engine nyata dengan progress parsing, cancel subprocess, plus opsi lengkap: trim, resolution preset, compress (CRF + libx264 preset), rotate/flip/crop, speed change 0.5x–2.0x, watermark teks via drawtext.
 - Audio module: full audio↔audio matrix (mp3/wav/aac/flac/m4a/opus/ogg) + video→audio extract; trim, fade-in/out, gain, loudnorm EBU R128, channel down-mix, sample-rate convert.
 - Tesseract OCR engine nyata: image → searchable PDF / TXT / hOCR / TSV, language picker (eng/ind/eng+ind plus custom), PSM, OEM; routed via `force_engine` flag pada page + `ConversionRegistry.engine_by_name` + `TaskQueue.engine_by_name`.
+- LibreOffice engine: format matrix penuh (text/spreadsheet/presentation), 52 pairs.
+- Subtitle engine Python-pure: SRT ↔ VTT dengan time shift; engine `requires_binary=""` di-allow oleh DependencyChecker.
+- Settings dataclass + JSON persistence di `~/.config/trex-converter/settings.json`; di-consume runner (max_concurrency) dan conversion_page (output_dir).
 - ImageMagick engine nyata dengan opsi lengkap: transform (rotate, flip, flop, auto-trim, free crop, aspect crop), resize modes (dimension, longest edge, percent, megapixel), color (grayscale, sepia, negate, normalize, brightness, contrast, gamma), filter (blur, sharpen, denoise, vignette), border/frame, watermark teks dengan gravity dan opacity, density, dan ICO multi-resolution auto-resize.
 - LibreOffice engine nyata untuk document-to-PDF dengan timeout dan cancel subprocess.
 - PDF engine nyata via PyMuPDF: render halaman PDF ke PNG/JPG, ekstrak teks ke TXT, plus operasi PDF→PDF (extract pages dengan range syntax, rotate, compress, encrypt/decrypt AES-256, strip metadata, watermark teks dengan gravity 9-arah dan opacity).
@@ -43,8 +46,10 @@ Sidebar menu:
 - Video
 - Audio
 - Document
+- Subtitle
 - OCR
 - PDF Tools
+- Settings
 - About
 
 Setiap menu menangani satu jenis conversion. Setiap halaman punya:
@@ -118,6 +123,10 @@ Icon sudah dipakai di:
 - `app/ui/video_options.py`: panel tabbed (Trim / Transform / Resize / Compress / Watermark) untuk Video page.
 - `app/ui/audio_options.py`: panel tabbed (Trim / Effects / Output) untuk Audio page.
 - `app/ui/ocr_options.py`: panel single-pane (Language / PSM / OEM) untuk OCR page.
+- `app/ui/subtitle_options.py`: panel single-pane (Time shift) untuk Subtitle page.
+- `app/ui/settings_page.py`: Settings page dengan form output folder / concurrency / quality / DPI.
+- `app/core/settings.py`: Settings dataclass + JSON persistence + module-level cache.
+- `app/engines/subtitle_engine.py`: Python parser untuk SRT/VTT.
 - `app/engines/imagemagick_engine.py`: real ImageMagick engine and image format list.
 - `app/engines/libreoffice_engine.py`: real LibreOffice document-to-PDF engine.
 - `app/engines/pdf_engine.py`: real PyMuPDF engine — render to image, extract text, dan operasi PDF→PDF (extract/rotate/compress/encrypt/decrypt/strip-metadata/watermark-text).
@@ -152,7 +161,7 @@ cd /home/sarta/Project/trex-converter
 Current expected result:
 
 ```text
-101 passed
+122 passed
 ```
 
 ## System Dependencies
@@ -192,8 +201,8 @@ Roadmap lengkap ada di `next-development.md`. Highlight berikutnya:
 - OCR lanjutan: PDF → searchable PDF (render + tesseract per-page + stitch via PyMuPDF), auto-rotate halaman sebelum OCR.
 - Audio lanjutan: merge/mix multi-track, ID3 tag editor (title/artist/album/cover), vocal remove sederhana.
 - Video lanjutan: stream-copy trim, two-pass target-size compress, GIF/WebP creator, thumbnail/contact sheet, logo watermark overlay, subtitle burn-in/extract, hardware accel detect, reverse video, concat multi-file.
-- Document: output multi-format selain PDF.
-- Settings page: default output dir, concurrency, default DPI.
+- Document lanjutan: PPTX/ODP → PNG slides per-slide, PDF/A archival, password-protected PDF, bulk merge DOCX → 1 PDF.
+- Subtitle lanjutan: ASS support, merge multi-file, burn-in (FFmpeg).
 - Batch drag-and-drop multi-file.
 - Package `.deb` properly.
 

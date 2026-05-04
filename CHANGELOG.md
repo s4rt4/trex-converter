@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added a Settings sidebar page with persisted defaults at `~/.config/trex-converter/settings.json` (output folder, max concurrency, image quality, PDF DPI). Concurrency applies on next launch; output folder is honored by every conversion page when suggesting an output path.
+- Added a Subtitle sidebar page powered by a new pure-Python `SubtitleEngine` (no external binary): SRT ↔ VTT conversion with optional time shift; `EngineCapabilities.requires_binary=""` is now treated as always-available by the dependency checker.
+- Expanded the LibreOffice engine to a full Document format matrix: text docs ↔ DOCX/ODT/RTF/HTML/EPUB/TXT/PDF, spreadsheets ↔ XLSX/ODS/CSV/HTML/PDF, presentations ↔ PPTX/ODP/PDF (52 pairs). Document page output combo now exposes every reachable target.
 - Replaced the Tesseract OCR stub with a real engine: image (png/jpg/jpeg/tif/tiff/bmp) → searchable PDF, TXT, hOCR, or TSV with multi-language picker (eng/ind/eng+ind plus custom), PSM (13 modes), and OEM (4 modes).
 - Added an OCR sidebar page with a single-pane `OCROptionsPanel`; the new `force_engine` flag on `ConversionPageConfig` plus `ConversionRegistry.engine_by_name` and a `TaskQueue.engine_by_name` resolver lets the OCR page route png→pdf to Tesseract while the Image page keeps routing png→pdf to ImageMagick.
 - Added an Audio sidebar page with a tabbed `AudioOptionsPanel` (Trim / Effects / Output) covering trim, fade-in/out (`afade`), gain ±20 dB (`volume`), loudness normalize (EBU R128 `loudnorm`), channel down-mix (`-ac`), and sample-rate convert (`-ar`).

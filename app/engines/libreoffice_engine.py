@@ -9,22 +9,20 @@ from app.core.task import Task
 from app.engines.base import BaseEngine, EngineCapabilities
 
 
-SUPPORTED_INPUT_FORMATS = {
-    "doc",
-    "docx",
-    "odp",
-    "ods",
-    "odt",
-    "ppt",
-    "pptx",
-    "rtf",
-    "xls",
-    "xlsx",
-}
-SUPPORTED_PAIRS = {
-    (format_in, "pdf")
-    for format_in in SUPPORTED_INPUT_FORMATS
-}
+TEXT_INPUTS = {"doc", "docx", "odt", "rtf"}
+TEXT_OUTPUTS = {"docx", "odt", "rtf", "html", "epub", "txt", "pdf"}
+SPREADSHEET_INPUTS = {"xls", "xlsx", "ods"}
+SPREADSHEET_OUTPUTS = {"xlsx", "ods", "csv", "html", "pdf"}
+PRESENTATION_INPUTS = {"ppt", "pptx", "odp"}
+PRESENTATION_OUTPUTS = {"pptx", "odp", "pdf"}
+
+SUPPORTED_INPUT_FORMATS = TEXT_INPUTS | SPREADSHEET_INPUTS | PRESENTATION_INPUTS
+
+SUPPORTED_PAIRS = (
+    {(fmt_in, fmt_out) for fmt_in in TEXT_INPUTS for fmt_out in TEXT_OUTPUTS}
+    | {(fmt_in, fmt_out) for fmt_in in SPREADSHEET_INPUTS for fmt_out in SPREADSHEET_OUTPUTS}
+    | {(fmt_in, fmt_out) for fmt_in in PRESENTATION_INPUTS for fmt_out in PRESENTATION_OUTPUTS}
+)
 DEFAULT_TIMEOUT_SECONDS = 120
 
 
@@ -68,7 +66,9 @@ class LibreOfficeEngine(BaseEngine):
                         f"LibreOffice exited with code {process.returncode}"
                     )
 
-                produced_path = _find_converted_pdf(task.input_path, temp_output_dir)
+                produced_path = _find_converted_file(
+                    task.input_path, temp_output_dir, task.format_out
+                )
                 shutil.move(str(produced_path), str(output_path))
                 task.progress = 1.0
             except asyncio.TimeoutError as exc:
@@ -128,13 +128,16 @@ def _append_output(task: Task, output: bytes) -> None:
         task.append_log(text)
 
 
-def _find_converted_pdf(input_path: Path, output_dir: Path) -> Path:
-    expected_path = output_dir / f"{Path(input_path).stem}.pdf"
+def _find_converted_file(input_path: Path, output_dir: Path, format_out: str) -> Path:
+    suffix = format_out.lower()
+    expected_path = output_dir / f"{Path(input_path).stem}.{suffix}"
     if expected_path.exists():
         return expected_path
 
-    pdf_outputs = sorted(output_dir.glob("*.pdf"))
-    if len(pdf_outputs) == 1:
-        return pdf_outputs[0]
+    matches = sorted(output_dir.glob(f"*.{suffix}"))
+    if len(matches) == 1:
+        return matches[0]
 
-    raise RuntimeError("LibreOffice did not produce a PDF output file")
+    raise RuntimeError(
+        f"LibreOffice did not produce a .{suffix} output file"
+    )

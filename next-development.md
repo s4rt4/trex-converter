@@ -63,9 +63,9 @@ Pisahkan dari Video supaya alur pengguna fokus.
 
 Saat ini hanya `*→PDF`.
 
-- [ ] Output multi-format: DOCX/ODT ↔ DOCX/ODT/RTF/HTML/EPUB/TXT
-- [ ] XLSX/ODS ↔ CSV/HTML/PDF
-- [ ] PPTX/ODP → PNG/JPG slides per-slide
+- [x] Output multi-format: DOCX/ODT ↔ DOCX/ODT/RTF/HTML/EPUB/TXT/PDF
+- [x] XLSX/ODS ↔ XLSX/ODS/CSV/HTML/PDF
+- [~] PPTX/ODP → PNG/JPG slides per-slide — PPTX/ODP↔PPTX/ODP/PDF selesai; render slide ke PNG/JPG belum
 - [ ] PDF/A archival output
 - [ ] Password-protected PDF export
 - [ ] Bulk merge banyak DOCX → 1 PDF
@@ -104,7 +104,7 @@ ROI tertinggi karena tool gratis dan use-case-nya luas.
 | Modul | Engine | Status |
 |---|---|---|
 | Audio | FFmpeg | lihat #3 |
-| Subtitle Tools | FFmpeg + parser teks | [ ] convert SRT↔VTT↔ASS, shift timing, merge, burn-in |
+| Subtitle Tools | Python parser + FFmpeg | [~] convert SRT↔VTT selesai dengan shift timing; ASS, merge, burn-in belum |
 | Ebook | Pandoc / Calibre | [ ] EPUB↔MOBI↔DOCX↔PDF↔HTML |
 | Archive | tar / zip / 7z | [ ] compress/extract sebagai bagian alur batch |
 | QR / Barcode | `qrencode` + `zbarimg` | [ ] generate QR, decode dari image |
@@ -112,7 +112,7 @@ ROI tertinggi karena tool gratis dan use-case-nya luas.
 
 ## 8. Cross-cutting
 
-- [ ] Settings page: default output dir, concurrency, default DPI, default kualitas
+- [x] Settings page: default output dir, concurrency, default DPI, default kualitas — disimpan di `~/.config/trex-converter/settings.json`. Concurrency apply on next launch; output_dir apply ke auto-suggested output path immediately
 - [ ] Preview/details panel untuk task terpilih (log + thumbnail output)
 - [ ] Batch drag-and-drop multi-file
 - [ ] Preset save/load per modul
@@ -127,3 +127,6 @@ ROI tertinggi karena tool gratis dan use-case-nya luas.
 - 2026-05-04 — Video Module gelombang 1 selesai: trim (start/end), resolution preset 4K/1440p/1080p/720p/480p/360p, compress (CRF + libx264 preset), rotate (0/90/180/270), flip H/V, free crop `WxH+X+Y`, speed change 0.5x–2.0x (setpts + atempo), watermark teks via drawtext (gravity 9-arah, size, opacity). Filter chain order: crop → transpose → flip → scale → setpts → drawtext. Engine `FFmpegEngine` SUPPORTED_PAIRS diperluas ke matrix mp4/mov/mkv/webm + audio extract; registry sekarang generate ffmpeg pairs dari engine constant. Panel `VideoOptionsPanel` 5-tab (Trim / Transform / Resize / Compress / Watermark) di-mount ke Video page. Bug `_output_belongs_to_page` PDF yang menyembunyikan output `pdf` dari combo (akibatnya semua operasi PDF Tools tidak bisa di-trigger dari UI) ikut diperbaiki. Test suite naik dari 45 ke 74 passed (29 tes baru untuk arg builder FFmpeg).
 - 2026-05-04 — Audio Module gelombang 1 selesai: trim (start/end), fade-in/out via `afade`, gain ±20 dB via `volume`, loudness normalize (`loudnorm` EBU R128), channel down-mix (`-ac` 1/2), sample-rate convert (`-ar` 22.05k/44.1k/48k/96k), full audio format matrix (mp3/wav/aac/flac/m4a/opus/ogg) plus video → audio extract. Audio filter chain order: atempo → afade-in → afade-out → volume → loudnorm. Panel `AudioOptionsPanel` 3-tab (Trim / Effects / Output) ditambah; sidebar dapat entri Audio (ikon `fa5s.music`). Video page di-trim ke output video-only (mp4/mov/mkv/webm) untuk hindari overlap dengan Audio page. Test suite naik dari 74 ke 85 passed (11 tes baru untuk filter audio + supports).
 - 2026-05-04 — OCR Module gelombang 1 selesai: `TesseractOCREngine` naik dari stub ke implementasi nyata (subprocess `tesseract`), input image (png/jpg/jpeg/tif/tiff/bmp) → output txt/pdf/hocr/tsv, pemilih bahasa (preset eng/ind/eng+ind + custom field), PSM 13 mode dan OEM 4 mode picker. Sidebar dapat entri OCR (ikon `fa5s.font`); panel `OCROptionsPanel` (single-pane) di-mount via flag baru `force_engine` di `ConversionPageConfig`. Routing per-page: `ConversionRegistry.engine_by_name(name)` baru, `TaskQueue` menerima callable opsional `engine_by_name` yang dipakai duluan saat `task.engine` di-set; kombinasinya membuat png→pdf bisa di-route ke ImageMagick (Image page) atau Tesseract (OCR page) tanpa konflik di registry. Test suite naik dari 85 ke 101 passed (10 tes OCR engine + 4 registry + 2 queue).
+- 2026-05-04 — Document Module gelombang 1 selesai: LibreOffice engine sekarang punya format matrix penuh — text doc (doc/docx/odt/rtf) ↔ docx/odt/rtf/html/epub/txt/pdf, spreadsheet (xls/xlsx/ods) ↔ xlsx/ods/csv/html/pdf, presentation (ppt/pptx/odp) ↔ pptx/odp/pdf (52 pairs total). Helper `_find_converted_file` digeneralisasi dari `_find_converted_pdf` untuk handle ekstensi apa pun. Document page output filter di-tweak agar combo menampilkan semua format dokumen relevan. Test naik 101 → 105 (4 tes baru: text/spreadsheet/presentation supports + non-PDF subprocess flow).
+- 2026-05-04 — Subtitle Tools modul baru: engine Python-pure `SubtitleEngine` (no external dep) untuk SRT↔VTT dengan parser regex robust (skip WEBVTT/NOTE/STYLE blocks, optional cue identifier), time shift +/-3600s (clamp ke 0 saat negatif overshoot), `EngineCapabilities.requires_binary=""` ditambah dukungan di `DependencyChecker` (return available untuk binary kosong). Sidebar entri "Subtitle" (ikon `fa5s.closed-captioning`) + panel single-pane time-shift. Test suite +11 (parser, formatter, engine flow).
+- 2026-05-04 — Settings page (cross-cutting §8) selesai: `app/core/settings.py` Settings dataclass + JSON persistence di `~/.config/trex-converter/settings.json` + module-level cache (`get_settings`/`set_settings`); fields: `output_dir`, `max_concurrency`, `default_image_quality`, `default_pdf_dpi`. SettingsPage di sidebar (ikon `fa5s.cog`, sebelum About). `runner.create_default_queue` baca `max_concurrency` dari settings (apply on launch); `MainWindow.__init__` juga; `ConversionPage._update_output_path` honor `output_dir` saat suggest path output. Test +6 (load defaults, corrupt JSON, round-trip, unknown keys, non-dict payload). Test suite final 101 → 122 passed.

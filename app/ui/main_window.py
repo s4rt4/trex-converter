@@ -16,6 +16,8 @@ from app.ui.audio_options import AudioOptionsPanel
 from app.ui.image_options import ImageOptionsPanel
 from app.ui.ocr_options import OCROptionsPanel
 from app.ui.pdf_operations import PDFOperationsPanel
+from app.ui.settings_page import SettingsPage
+from app.ui.subtitle_options import SubtitleOptionsPanel
 from app.ui.video_options import VideoOptionsPanel
 from app.ui.icons import ICON_SIZE, accent_icon, app_icon, icon, surface_icon
 from app.ui.theme import (
@@ -90,6 +92,15 @@ PAGE_CONFIGS = (
         kind="document",
     ),
     ConversionPageConfig(
+        title="Subtitle",
+        input_formats=("srt", "vtt"),
+        default_output="vtt",
+        engine_name="subtitle",
+        kind="subtitle",
+        force_engine=True,
+        extra_options_factory=SubtitleOptionsPanel,
+    ),
+    ConversionPageConfig(
         title="OCR",
         input_formats=("png", "jpg", "jpeg", "tif", "tiff", "bmp"),
         default_output="txt",
@@ -116,10 +127,14 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(app_icon())
         self.resize(1120, 720)
         self.registry = ConversionRegistry()
+        from app.core.settings import get_settings as _get_settings
+
         self.queue = TaskQueue(
             self.registry.resolve,
+            max_concurrency=max(1, _get_settings().max_concurrency),
             repository=TaskRepository(),
             resume_pending=True,
+            engine_by_name=self.registry.engine_by_name,
         )
         self.queue.subscribe(lambda _task: self._refresh_tasks())
         self.pages: list[ConversionPage] = []
@@ -161,6 +176,10 @@ class MainWindow(QMainWindow):
             self.task_views.append(page)
             self.stack.addWidget(page)
 
+        settings = SettingsPage(self.stack)
+        self.task_views.append(settings)
+        self.stack.addWidget(settings)
+
         about = AboutPage(self.stack)
         self.task_views.append(about)
         self.stack.addWidget(about)
@@ -184,6 +203,7 @@ class MainWindow(QMainWindow):
         self.nav.addItem(QListWidgetItem(_page_icon("dashboard"), "Dashboard"))
         for config in PAGE_CONFIGS:
             self.nav.addItem(QListWidgetItem(_page_icon(config.kind), config.title))
+        self.nav.addItem(QListWidgetItem(_page_icon("settings"), "Settings"))
         self.nav.addItem(QListWidgetItem(_page_icon("about"), "About"))
         self.nav.currentRowChanged.connect(self.stack_index_changed)
         layout.addWidget(self.nav, 1)
@@ -423,7 +443,8 @@ class MainWindow(QMainWindow):
                 background: transparent;
                 border: 0;
             }
-            #OCROptionsPanel {
+            #OCROptionsPanel,
+            #SubtitleOptionsPanel {
                 background: $BRAND_SURFACE_SOFT;
                 border: 1px solid rgba(86, 182, 198, 145);
                 border-radius: 8px;
@@ -475,7 +496,9 @@ class MainWindow(QMainWindow):
             #VideoOptionsPanel QWidget,
             #AudioOptionsPanel QWidget,
             #OCROptionsPanel,
-            #OCROptionsPanel QWidget {
+            #OCROptionsPanel QWidget,
+            #SubtitleOptionsPanel,
+            #SubtitleOptionsPanel QWidget {
                 background: $BRAND_SURFACE_SOFT;
             }
             #ImageOptionsPanel QSlider::groove:horizontal,
@@ -706,6 +729,8 @@ def _page_icon(kind: str):
         "video": "fa5s.video",
         "audio": "fa5s.music",
         "ocr": "fa5s.font",
+        "subtitle": "fa5s.closed-captioning",
+        "settings": "fa5s.cog",
         "document": "fa5s.file-alt",
         "pdf": "fa5s.file-pdf",
         "dashboard": "fa5s.chart-pie",

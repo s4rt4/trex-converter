@@ -5,13 +5,21 @@ from dataclasses import dataclass
 from app.engines.base import BaseEngine
 from app.engines.ffmpeg_engine import FFmpegEngine, SUPPORTED_PAIRS as FFMPEG_PAIRS
 from app.engines.imagemagick_engine import IMAGE_FORMATS, ImageMagickEngine
-from app.engines.libreoffice_engine import LibreOfficeEngine, SUPPORTED_INPUT_FORMATS
+from app.engines.libreoffice_engine import (
+    LibreOfficeEngine,
+    SUPPORTED_INPUT_FORMATS,
+    SUPPORTED_PAIRS as LIBREOFFICE_PAIRS,
+)
 from app.engines.ocr_engine import (
     OCR_INPUT_FORMATS,
     SUPPORTED_PAIRS as OCR_PAIRS,
     TesseractOCREngine,
 )
 from app.engines.pdf_engine import PDF_IMAGE_FORMATS, PDFEngine
+from app.engines.subtitle_engine import (
+    SUPPORTED_PAIRS as SUBTITLE_PAIRS,
+    SubtitleEngine,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,7 +68,9 @@ class ConversionRegistry:
     def required_binaries(self) -> set[str]:
         binaries: set[str] = set()
         for entry in self._entries:
-            binaries.add(self._get_engine(entry).capabilities.requires_binary)
+            binary = self._get_engine(entry).capabilities.requires_binary
+            if binary:
+                binaries.add(binary)
         return binaries
 
     def all_entries(self) -> list[RegistryEntry]:
@@ -87,8 +97,8 @@ def default_entries() -> list[RegistryEntry]:
         if format_in != format_out
     ]
     document_pairs = [
-        (format_in, "pdf", "libreoffice", LibreOfficeEngine)
-        for format_in in SUPPORTED_INPUT_FORMATS
+        (format_in, format_out, "libreoffice", LibreOfficeEngine)
+        for format_in, format_out in sorted(LIBREOFFICE_PAIRS)
     ]
     ffmpeg_pairs = [
         (format_in, format_out, "ffmpeg", FFmpegEngine)
@@ -98,6 +108,10 @@ def default_entries() -> list[RegistryEntry]:
         (format_in, format_out, "tesseract", TesseractOCREngine)
         for format_in, format_out in sorted(OCR_PAIRS)
     ]
+    subtitle_pairs = [
+        (format_in, format_out, "subtitle", SubtitleEngine)
+        for format_in, format_out in sorted(SUBTITLE_PAIRS)
+    ]
     mapping: list[tuple[str, str, str, type[BaseEngine]]] = [
         *[
             ("pdf", format_out, "pdf", PDFEngine)
@@ -105,7 +119,7 @@ def default_entries() -> list[RegistryEntry]:
         ],
         ("pdf", "pdf", "pdf", PDFEngine),
         ("pdf", "txt", "pdf", PDFEngine),
-    ] + ffmpeg_pairs + document_pairs + image_pairs + ocr_pairs
+    ] + ffmpeg_pairs + document_pairs + image_pairs + ocr_pairs + subtitle_pairs
     return [
         RegistryEntry(
             format_in=normalize_format(format_in),

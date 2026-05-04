@@ -12,6 +12,9 @@ Implemented:
 - Dependency checker berbasis `PATH`.
 - Registry untuk routing format ke engine.
 - Tesseract OCR engine: image (png/jpg/jpeg/tif/tiff/bmp) → searchable PDF / TXT / hOCR / TSV dengan pemilih bahasa, PSM, dan OEM.
+- LibreOffice document engine dengan format matrix penuh: text docs ↔ DOCX/ODT/RTF/HTML/EPUB/TXT/PDF, spreadsheets ↔ XLSX/ODS/CSV/HTML/PDF, presentations ↔ PPTX/ODP/PDF.
+- Subtitle engine Python-pure: SRT ↔ VTT dengan time shift.
+- Settings page dengan persisten JSON: default output folder, concurrency, image quality, PDF DPI.
 - FFmpeg engine via `asyncio.create_subprocess_exec` dengan progress parser, cancel, trim (start/end), resolution preset 4K/1440p/1080p/720p/480p/360p, compress (CRF + libx264 preset), rotate, flip H/V, free crop, speed change 0.5x–2.0x, dan watermark teks (drawtext, gravity 9-arah + opacity).
 - Audio module: full audio↔audio matrix (mp3/wav/aac/flac/m4a/opus/ogg) plus video→audio extract; trim, fade-in/out, gain ±20 dB, EBU R128 loudness normalize, channel down-mix, sample-rate convert.
 - ImageMagick engine lengkap dengan transform (rotate/flip/flop/trim/crop/aspect crop), resize modes (dimension/longest-edge/percent/megapixel), color (grayscale/sepia/negate/normalize/brightness/contrast/gamma), filter (blur/sharpen/denoise/vignette), border & frame, text watermark, density, dan ICO multi-resolution.

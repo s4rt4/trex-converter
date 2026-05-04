@@ -20,6 +20,9 @@ class DependencyChecker:
         }
 
     def check(self, binary: str) -> DependencyStatus:
+        if not binary:
+            return DependencyStatus(binary="", available=True, path="builtin")
+
         if binary.startswith("python:"):
             module_name = binary.split(":", 1)[1]
             return DependencyStatus(
