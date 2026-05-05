@@ -47,6 +47,7 @@ class ConversionPageConfig:
     show_bitrate: bool = False
     extra_options_factory: Callable[[QWidget], QWidget] | None = None
     force_engine: bool = False
+    directory_output: bool = False
 
 
 class ConversionPage(QWidget):
@@ -238,6 +239,14 @@ class ConversionPage(QWidget):
         if not self._input_path:
             QMessageBox.warning(self, "Input Required", "Choose an input file first.")
             return
+        if self.config.directory_output:
+            current = self.output_display.text() or str(self._input_path.parent)
+            picked = QFileDialog.getExistingDirectory(
+                self, "Select output folder", current
+            )
+            if picked:
+                self.output_display.setText(picked)
+            return
         output_name = _get_save_file_name(
             self,
             "Select output file",
@@ -265,7 +274,10 @@ class ConversionPage(QWidget):
 
         suffix = self.output_combo.currentText()
         output_dir = get_settings().output_dir.strip()
-        if output_dir:
+        if self.config.directory_output:
+            base = Path(output_dir) if output_dir else self._input_path.parent
+            target = base / self._input_path.stem
+        elif output_dir:
             target = Path(output_dir) / f"{self._input_path.stem}.{suffix}"
         else:
             target = self._input_path.with_suffix(f".{suffix}")
@@ -340,6 +352,10 @@ class ConversionPage(QWidget):
             return output in {"txt", "pdf", "hocr", "tsv"}
         if self.config.kind == "subtitle":
             return output in {"srt", "vtt", "ass"}
+        if self.config.kind == "archive":
+            return output == "folder"
+        if self.config.kind == "qr":
+            return output in {"png", "svg", "txt"}
         return True
 
 

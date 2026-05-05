@@ -54,3 +54,26 @@ def test_png_to_txt_routes_to_tesseract() -> None:
     registry = ConversionRegistry()
 
     assert registry.resolve("png", "txt").name == "tesseract"
+
+
+def test_zip_to_folder_routes_to_archive_engine() -> None:
+    registry = ConversionRegistry()
+
+    assert registry.resolve("zip", "folder").name == "archive"
+    assert registry.resolve("tgz", "folder").name == "archive"
+
+
+def test_txt_to_png_routes_to_qr_engine() -> None:
+    registry = ConversionRegistry()
+
+    assert registry.resolve("txt", "png").name == "qr"
+    assert registry.resolve("txt", "svg").name == "qr"
+
+
+def test_required_binaries_includes_qr_extras() -> None:
+    registry = ConversionRegistry()
+
+    binaries = registry.required_binaries()
+    # qrencode is the primary binary; zbarimg is registered as an extra
+    assert "qrencode" in binaries
+    assert "zbarimg" in binaries

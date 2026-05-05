@@ -16,6 +16,7 @@ from app.ui.audio_options import AudioOptionsPanel
 from app.ui.image_options import ImageOptionsPanel
 from app.ui.ocr_options import OCROptionsPanel
 from app.ui.pdf_operations import PDFOperationsPanel
+from app.ui.qr_options import QROptionsPanel
 from app.ui.settings_page import SettingsPage
 from app.ui.subtitle_options import SubtitleOptionsPanel
 from app.ui.video_options import VideoOptionsPanel
@@ -116,6 +117,27 @@ PAGE_CONFIGS = (
         engine_name="pdf",
         kind="pdf",
         extra_options_factory=PDFOperationsPanel,
+    ),
+    ConversionPageConfig(
+        title="Archive",
+        input_formats=("zip", "tar", "tgz", "tbz", "txz", "gz", "bz2", "xz"),
+        default_output="folder",
+        engine_name="archive",
+        kind="archive",
+        force_engine=True,
+        directory_output=True,
+    ),
+    ConversionPageConfig(
+        title="QR / Barcode",
+        input_formats=(
+            "txt",
+            "png", "jpg", "jpeg", "bmp", "tif", "tiff", "gif", "webp",
+        ),
+        default_output="png",
+        engine_name="qr",
+        kind="qr",
+        force_engine=True,
+        extra_options_factory=QROptionsPanel,
     ),
 )
 
@@ -735,5 +757,7 @@ def _page_icon(kind: str):
         "pdf": "fa5s.file-pdf",
         "dashboard": "fa5s.chart-pie",
         "about": "fa5s.info-circle",
+        "archive": "fa5s.file-archive",
+        "qr": "fa5s.qrcode",
     }
     return surface_icon(icons.get(kind, "fa5s.file"))

@@ -27,6 +27,8 @@ Sudah ada:
 - Tesseract OCR engine nyata: image (png/jpg/jpeg/tif/tiff/bmp) DAN PDF input → searchable PDF / TXT / hOCR / TSV. PDF pipeline: render setiap halaman dengan PyMuPDF (default 300 DPI), OCR per halaman, stitch (PDF via `insert_pdf`, TXT dengan `\f`, hOCR concat ocr_page divs + renumber ID, TSV header tunggal + rows). Auto-rotate via OSD pre-pass (`tesseract --psm 0`) parsing `Rotate:` lalu re-render via `page.set_rotation`. Language picker (eng/ind/eng+ind plus custom), PSM, OEM. Routed via `force_engine` flag pada page + `ConversionRegistry.engine_by_name` + `TaskQueue.engine_by_name`.
 - LibreOffice engine: format matrix penuh (text/spreadsheet/presentation), 52 pairs.
 - Subtitle engine Python-pure: SRT ↔ VTT ↔ ASS round-trip dengan time shift. ASS parser handle Format header detection, Dialogue rows dengan koma di text, `\N` escape, Comment skip. ASS formatter emit Script Info + V4+ Styles + Events dengan default Arial 32 white style. Engine `requires_binary=""` di-allow oleh DependencyChecker.
+- Archive engine Python-pure (stdlib `zipfile` + `tarfile`): extract zip/tar/tgz/tbz/txz/gz/bz2/xz → folder. Reject absolute path dan path-traversal entries. Tar extract pakai `filter='data'`.
+- QR engine: `qrencode` (generate txt → png/svg dengan size/margin/ECC L-M-Q-H) + `zbarimg` (decode image → txt, exit 4 = no barcode). Engine declare `requires_binary="qrencode"` + `extra_binaries=("zbarimg",)`.
 - Settings dataclass + JSON persistence di `~/.config/trex-converter/settings.json`; di-consume runner (max_concurrency) dan conversion_page (output_dir).
 - ImageMagick engine nyata dengan opsi lengkap: transform (rotate, flip, flop, auto-trim, free crop, aspect crop), resize modes (dimension, longest edge, percent, megapixel), color (grayscale, sepia, negate, normalize, brightness, contrast, gamma), filter (blur, sharpen, denoise, vignette), border/frame, watermark teks dengan gravity dan opacity, density, dan ICO multi-resolution auto-resize.
 - PDF engine nyata via PyMuPDF + qpdf: render halaman PDF ke PNG/JPG, ekstrak ke TXT/HTML, plus operasi PDF→PDF (extract pages, reorder, rotate, compress, repair via qpdf, encrypt/decrypt AES-256, strip metadata, edit metadata, watermark teks gravity 9-arah).
@@ -48,6 +50,8 @@ Sidebar menu:
 - Subtitle
 - OCR
 - PDF Tools
+- Archive
+- QR / Barcode
 - Settings
 - About
 
@@ -125,7 +129,10 @@ Icon sudah dipakai di:
 - `app/ui/subtitle_options.py`: panel single-pane (Time shift) untuk Subtitle page.
 - `app/ui/settings_page.py`: Settings page dengan form output folder / concurrency / quality / DPI.
 - `app/core/settings.py`: Settings dataclass + JSON persistence + module-level cache.
-- `app/engines/subtitle_engine.py`: Python parser untuk SRT/VTT.
+- `app/engines/subtitle_engine.py`: Python parser untuk SRT/VTT/ASS.
+- `app/engines/archive_engine.py`: stdlib zip/tar extractor dengan path-safety guard.
+- `app/engines/qr_engine.py`: qrencode (generate) + zbarimg (decode) wrapper.
+- `app/ui/qr_options.py`: panel single-pane untuk QR options (size/margin/ECC).
 - `app/engines/imagemagick_engine.py`: real ImageMagick engine and image format list.
 - `app/engines/libreoffice_engine.py`: real LibreOffice engine — full Document format matrix (text/spreadsheet/presentation, 52 pairs); helper `_find_converted_file` handles arbitrary output extension.
 - `app/engines/pdf_engine.py`: real PyMuPDF engine — render to image, extract to TXT/HTML, dan operasi PDF→PDF (extract_pages/reorder/rotate/compress/repair-via-qpdf/encrypt/decrypt/strip-metadata/edit-metadata/watermark-text).
@@ -160,7 +167,7 @@ cd /home/sarta/Project/trex-converter
 Current expected result:
 
 ```text
-170 passed
+195 passed
 ```
 
 ## System Dependencies
@@ -171,12 +178,14 @@ Expected binaries:
 - `libreoffice`
 - `qpdf`
 - `tesseract`
+- `qrencode` (QR generate)
+- `zbarimg` (QR/barcode decode)
 
 Install command:
 
 ```bash
 sudo apt-get update
-sudo apt-get install ffmpeg imagemagick libreoffice qpdf tesseract-ocr
+sudo apt-get install ffmpeg imagemagick libreoffice qpdf tesseract-ocr qrencode zbar-tools
 ```
 
 ## Python Dependencies
@@ -201,7 +210,8 @@ Roadmap lengkap dengan checklist `[x]/[~]/[ ]` ada di `next-development.md`. Hig
 - Video: stream-copy trim, two-pass target-size compress, subtitle extract dari MKV, hardware accel detect, concat multi-file.
 - Document: PPTX→PNG slides, PDF/A archival, password-protected PDF, bulk merge.
 - Subtitle: merge multi-file.
-- Modul baru §7: Ebook (Pandoc/Calibre), Archive (tar/zip/7z), QR/Barcode (qrencode + zbarimg), Metadata cross-cut (exiftool).
+- Archive: compress folder → archive (extract sudah selesai).
+- Modul baru §7: Ebook (Pandoc/Calibre), Metadata cross-cut (exiftool).
 - Cross-cutting §8: preview/details panel per task, batch drag-and-drop multi-file, preset save/load per modul, packaging `.deb` final.
 
 **Catatan arsitektur untuk fitur multi-input/multi-output**: PDF merge, video concat, audio mix, image montage, dan PDF split butuh refactor `Task` model dari single-input/single-output. Itu prasyarat besar yang belum dibuat.

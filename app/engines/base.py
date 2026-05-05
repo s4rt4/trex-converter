@@ -11,6 +11,7 @@ class EngineCapabilities:
     supports_progress: bool
     supports_cancel: bool
     requires_binary: str
+    extra_binaries: tuple[str, ...] = ()
 
 
 class BaseEngine(ABC):

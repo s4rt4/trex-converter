@@ -14,6 +14,8 @@ Implemented:
 - Tesseract OCR engine: image (png/jpg/jpeg/tif/tiff/bmp) DAN PDF input → searchable PDF / TXT / hOCR / TSV dengan pemilih bahasa, PSM, OEM, render DPI 72–600 (default 300), dan auto-rotate via OSD pre-pass.
 - LibreOffice document engine dengan format matrix penuh: text docs ↔ DOCX/ODT/RTF/HTML/EPUB/TXT/PDF, spreadsheets ↔ XLSX/ODS/CSV/HTML/PDF, presentations ↔ PPTX/ODP/PDF.
 - Subtitle engine Python-pure: SRT ↔ VTT ↔ ASS round-trip dengan time shift; ASS parser handle Format header detection, Dialogue rows, escape `\N`, dan Comment skip.
+- Archive engine Python-pure (stdlib `zipfile` + `tarfile`): extract zip/tar/tgz/tbz/txz/gz/bz2/xz → folder dengan path-traversal guard.
+- QR / Barcode engine: `qrencode` (txt → png/svg dengan size/margin/ECC L-M-Q-H) + `zbarimg` (image → txt, `--raw`).
 - Settings page dengan persisten JSON: default output folder, concurrency, image quality, PDF DPI.
 - FFmpeg engine via `asyncio.create_subprocess_exec` dengan progress parser, cancel, trim (start/end), resolution preset 4K/1440p/1080p/720p/480p/360p, compress (CRF + libx264 preset), rotate, flip H/V, free crop, speed change 0.5x–2.0x, watermark teks (drawtext, gravity 9-arah + opacity), reverse video (`reverse`+`areverse`), logo overlay watermark via `-filter_complex` dengan 9-arah + scale + opacity, GIF creator (palettegen+paletteuse), animated WebP (libwebp+loop), contact sheet ke PNG/JPG (select+tile), single-frame still, dan subtitle burn-in (`subtitles=`/`ass=` filter).
 - Audio module: full audio↔audio matrix (mp3/wav/aac/flac/m4a/opus/ogg) plus video→audio extract; trim, fade-in/out, gain ±20 dB, EBU R128 loudness normalize, vocal remove (center-channel cancel), channel down-mix, sample-rate convert, dan ID3 tag editor (title/artist/album/year/genre/track).
@@ -59,6 +61,8 @@ Engine asli membutuhkan binary sistem sesuai fitur:
 - `libreoffice`
 - `qpdf`
 - `tesseract`
+- `qrencode` (QR generate)
+- `zbarimg` (QR/barcode decode, paket `zbar-tools`)
 
 PDF extract membutuhkan dependency Python `PyMuPDF` dari `pyproject.toml`.
 
@@ -66,7 +70,7 @@ Install di Debian/Ubuntu:
 
 ```bash
 sudo apt-get update
-sudo apt-get install ffmpeg imagemagick libreoffice qpdf tesseract-ocr
+sudo apt-get install ffmpeg imagemagick libreoffice qpdf tesseract-ocr qrencode zbar-tools
 ```
 
 ImageMagick bisa tersedia sebagai `magick` atau `convert`, tergantung versi distro.

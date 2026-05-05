@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.engines.archive_engine import (
+    ArchiveEngine,
+    SUPPORTED_PAIRS as ARCHIVE_PAIRS,
+)
 from app.engines.base import BaseEngine
 from app.engines.ffmpeg_engine import FFmpegEngine, SUPPORTED_PAIRS as FFMPEG_PAIRS
 from app.engines.imagemagick_engine import IMAGE_FORMATS, ImageMagickEngine
@@ -16,6 +20,10 @@ from app.engines.ocr_engine import (
     TesseractOCREngine,
 )
 from app.engines.pdf_engine import PDF_IMAGE_FORMATS, PDFEngine
+from app.engines.qr_engine import (
+    QREngine,
+    SUPPORTED_PAIRS as QR_PAIRS,
+)
 from app.engines.subtitle_engine import (
     SUPPORTED_PAIRS as SUBTITLE_PAIRS,
     SubtitleEngine,
@@ -68,9 +76,12 @@ class ConversionRegistry:
     def required_binaries(self) -> set[str]:
         binaries: set[str] = set()
         for entry in self._entries:
-            binary = self._get_engine(entry).capabilities.requires_binary
-            if binary:
-                binaries.add(binary)
+            capabilities = self._get_engine(entry).capabilities
+            if capabilities.requires_binary:
+                binaries.add(capabilities.requires_binary)
+            for extra in capabilities.extra_binaries:
+                if extra:
+                    binaries.add(extra)
         return binaries
 
     def all_entries(self) -> list[RegistryEntry]:
@@ -112,6 +123,14 @@ def default_entries() -> list[RegistryEntry]:
         (format_in, format_out, "subtitle", SubtitleEngine)
         for format_in, format_out in sorted(SUBTITLE_PAIRS)
     ]
+    archive_pairs = [
+        (format_in, format_out, "archive", ArchiveEngine)
+        for format_in, format_out in sorted(ARCHIVE_PAIRS)
+    ]
+    qr_pairs = [
+        (format_in, format_out, "qr", QREngine)
+        for format_in, format_out in sorted(QR_PAIRS)
+    ]
     mapping: list[tuple[str, str, str, type[BaseEngine]]] = [
         *[
             ("pdf", format_out, "pdf", PDFEngine)
@@ -119,7 +138,7 @@ def default_entries() -> list[RegistryEntry]:
         ],
         ("pdf", "pdf", "pdf", PDFEngine),
         ("pdf", "txt", "pdf", PDFEngine),
-    ] + ffmpeg_pairs + document_pairs + image_pairs + ocr_pairs + subtitle_pairs
+    ] + ffmpeg_pairs + document_pairs + image_pairs + ocr_pairs + subtitle_pairs + archive_pairs + qr_pairs
     return [
         RegistryEntry(
             format_in=normalize_format(format_in),
