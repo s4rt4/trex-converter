@@ -36,15 +36,15 @@ Tujuan: ekspos kemampuan ImageMagick di luar resize/quality/strip dasar.
 - [ ] Concat multi-file (same codec)
 - [~] Compress dengan target ukuran (two-pass) atau target CRF — CRF + preset selesai; two-pass target size belum
 - [x] Resolution preset 4K → 1080p / 720p / 480p (plus 1440p, 360p)
-- [ ] GIF / WebP creator dari clip video (palette gen untuk GIF)
-- [ ] Thumbnail / contact sheet (N frame jadi grid)
-- [~] Watermark logo overlay (posisi, waktu mulai, opacity) — watermark teks (drawtext) selesai dengan gravity 9-arah dan opacity; logo overlay belum
-- [ ] Subtitle burn-in (SRT/ASS hardcode)
+- [x] GIF / WebP creator dari clip video (palette gen untuk GIF) — palettegen + paletteuse untuk GIF, libwebp + loop=0 untuk WebP animasi
+- [x] Thumbnail / contact sheet (N frame jadi grid) — `select=not(mod(n,N))` + `tile=ColsxRows` ke PNG/JPG
+- [x] Watermark logo overlay (posisi, waktu mulai, opacity) — overlay via `-filter_complex` dengan gravity 9-arah, scale, dan opacity (`colorchannelmixer=aa`); watermark teks tetap tersedia
+- [x] Subtitle burn-in (SRT/ASS hardcode) — `subtitles=` filter (.srt/.vtt) atau `ass=` filter (.ass/.ssa) di video filter chain
 - [ ] Subtitle extract dari MKV
 - [ ] Hardware acceleration detect (vaapi / nvenc / qsv)
 - [x] Speed change (slowmo / timelapse) — 0.5x–2.0x via setpts + atempo
 - [x] Rotate / flip / crop video
-- [ ] Reverse video
+- [x] Reverse video — `reverse` + `areverse` filter (terakhir di chain)
 
 ## 3. Audio Module (FFmpeg) — modul baru
 
@@ -94,17 +94,17 @@ ROI tertinggi karena tool gratis dan use-case-nya luas.
 ## 6. OCR Module (Tesseract) — naikkan dari stub
 
 - [x] Image → searchable PDF (`tesseract input output pdf`)
-- [ ] PDF → searchable PDF (render → OCR layer per halaman → tempel via PyMuPDF)
-- [~] Image/PDF → TXT / hOCR / TSV — image (png/jpg/jpeg/tif/tiff/bmp) → TXT/PDF/hOCR/TSV selesai; PDF input belum
+- [x] PDF → searchable PDF (render → OCR layer per halaman → tempel via PyMuPDF) — render dengan PyMuPDF Pixmap @ 300 DPI default, OCR per halaman ke tmpfile, stitch via `Document.insert_pdf`
+- [x] Image/PDF → TXT / hOCR / TSV — image input (png/jpg/jpeg/tif/tiff/bmp) plus PDF input dengan stitcher (form-feed untuk TXT, ocr_page divs untuk hOCR, header tunggal + rows untuk TSV)
 - [x] Pemilih multi-language (ind+eng, dst.) — preset eng/ind/eng+ind plus custom field
-- [ ] Auto-rotate halaman sebelum OCR
+- [x] Auto-rotate halaman sebelum OCR — pre-pass `tesseract -- --psm 0` per halaman, parse `Rotate: N`, apply via `page.set_rotation` lalu re-render
 
 ## 7. Modul baru
 
 | Modul | Engine | Status |
 |---|---|---|
 | Audio | FFmpeg | lihat #3 |
-| Subtitle Tools | Python parser + FFmpeg | [~] convert SRT↔VTT selesai dengan shift timing; ASS, merge, burn-in belum |
+| Subtitle Tools | Python parser + FFmpeg | [~] SRT↔VTT↔ASS round-trip selesai (parser ASS minimal subset Dialogue events) plus burn-in via FFmpeg `subtitles=`/`ass=` filter di Video page; merge multi-file belum |
 | Ebook | Pandoc / Calibre | [ ] EPUB↔MOBI↔DOCX↔PDF↔HTML |
 | Archive | tar / zip / 7z | [ ] compress/extract sebagai bagian alur batch |
 | QR / Barcode | `qrencode` + `zbarimg` | [ ] generate QR, decode dari image |
@@ -132,3 +132,6 @@ ROI tertinggi karena tool gratis dan use-case-nya luas.
 - 2026-05-04 — Settings page (cross-cutting §8) selesai: `app/core/settings.py` Settings dataclass + JSON persistence di `~/.config/trex-converter/settings.json` + module-level cache (`get_settings`/`set_settings`); fields: `output_dir`, `max_concurrency`, `default_image_quality`, `default_pdf_dpi`. SettingsPage di sidebar (ikon `fa5s.cog`, sebelum About). `runner.create_default_queue` baca `max_concurrency` dari settings (apply on launch); `MainWindow.__init__` juga; `ConversionPage._update_output_path` honor `output_dir` saat suggest path output. Test +6 (load defaults, corrupt JSON, round-trip, unknown keys, non-dict payload). Test suite final 101 → 122 passed.
 - 2026-05-05 — Audio Module gelombang 2 mini: ID3 tag editor (title/artist/album/year→date/genre/track via `-metadata`) dan vocal remove (`pan=stereo|c0=c0-c1|c1=c1-c0`). Panel `AudioOptionsPanel` dapat tab "Tags" baru + checkbox "Vocal remove" di tab Effects. Test +4.
 - 2026-05-05 — PDF Tools gelombang 2 mini-batch: page reorder (operasi baru, pakai explicit list `3,1,2,4`), edit metadata (title/author/subject/keywords/creator via PyMuPDF `set_metadata`), PDF → HTML (PyMuPDF `get_text("html")` di-wrap dalam dokumen HTML5), repair via qpdf (round-trip, treats exit code 3/warnings sebagai success). Panel `PDFOperationsPanel`: Pages tab dapat aksi "Reorder", Compress tab dapat action combo (Compress/Repair), Metadata tab di-redesign jadi form (action Strip/Edit + 5 field). PDF Tools page input direstrict ke `pdf` only (sebelumnya menerima png/jpg/jpeg yang duplikasi Image page). Test +9 (reorder, edit metadata, html extraction, repair success/warning/error). Test suite final 122 → 135 passed.
+- 2026-05-05 — Video Module gelombang 2 selesai: GIF creator via `palettegen`+`paletteuse` filter graph (fps + width + Lanczos scale), animated WebP via `libwebp -loop 0` codec dengan quality 0–100, contact sheet (N frame jadi grid via `select='not(mod(n,interval))',scale,tile=COLSxROWS`) ke PNG/JPG, single-frame still extraction tanpa thumbnail_grid, logo overlay watermark dengan gravity 9-arah + scale + opacity (`colorchannelmixer=aa`) via `-filter_complex` (input kedua + map [vout] + map 0:a?), reverse video (`reverse`+`areverse` di akhir chain), dan subtitle burn-in (`subtitles=`/`ass=` filter dengan path escaping). FFmpegEngine SUPPORTED_PAIRS diperluas: video → gif/webp/png/jpg/jpeg. Panel `VideoOptionsPanel` dapat 4 tab baru: Effects (reverse + logo), Animation (GIF/WebP fps/width/quality), Thumbnails (grid rows/cols/interval/tile-width), Subtitles (burn-in path picker). Conversion page `_output_belongs_to_page` video kind diperluas ke {mp4, mov, mkv, webm, gif, webp, png, jpg, jpeg}. Test +17 (GIF palettegen, GIF override + chain, WebP libwebp, thumbnail grid, single-frame image, image with vf chain, logo basic + position/opacity + chain + audio-skip, reverse + chain, subtitle burn srt/ass + escape).
+- 2026-05-05 — OCR Module gelombang 2: PDF input pipeline lengkap. Render setiap halaman PDF → PNG via PyMuPDF Pixmap (default 300 DPI, range 72–600), OCR per halaman ke tmpfile, lalu stitch ke target output. Stitching: PDF via `Document.insert_pdf`, TXT dengan `\f` form-feed antar halaman, hOCR dengan `<div class='ocr_page'>` divs di-renumber ID page_1..N, TSV dengan header tunggal + rows concat. Auto-rotate via OSD pre-pass (`tesseract image - --psm 0`) parsing `Rotate: N` (normalize ke {0,90,180,270}, fallback 0 untuk non-canonical), apply via `page.set_rotation` lalu re-render. SUPPORTED_PAIRS naik: pdf × {txt, pdf, hocr, tsv} ditambahkan. Helper `parse_osd_rotation`, `stitch_text_pages`, `stitch_hocr_pages`, `stitch_tsv_pages` di-expose. OCROptionsPanel dapat field DPI (72–600) dan checkbox Auto-rotate. OCR page input formats `pdf` ditambah. Test +12 (osd parse 3 cases, stitch txt/hocr/tsv 5 cases, full pdf pipeline, failure propagation, support-pair check).
+- 2026-05-05 — Subtitle Module gelombang 2: ASS support penuh. Parser ASS minimal subset menangani section dispatcher `[Events]` + Format header detection (cari kolom `text`) + Dialogue rows dengan split bounded oleh text-field index (preserve koma di Text), `\N`/`\n` escape sequences, Comment lines diskip. Formatter ASS emit Script Info + V4+ Styles + Events dengan default Style "Arial 32px white" dan Dialogue per cue. Time format ASS: `H:MM:SS.cc` (centiseconds 2-digit). Round-trip ASS↔ASS preserve cues. SubtitleEngine dispatch table jadi `parsers/formatters` map (srt/vtt/ass) supaya pasangan format tinggal lookup. Subtitle page input formats sekarang `(srt, vtt, ass)`, output filter halaman juga ditambahkan ASS. Burn-in selesai di Video module (lihat di atas). Test +8 (ASS parse + comma-in-text + Comment skip, format script-info + newline-escape + centisecond pad, round-trip, srt→ass + ass→srt+shift). Test suite final 135 → 170 passed.

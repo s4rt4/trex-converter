@@ -55,8 +55,15 @@ def test_supports_video_to_video_and_extract() -> None:
     assert engine.supports("mov", "mkv")
     assert engine.supports("mp4", "mp3")
     assert engine.supports("mkv", "wav")
-    assert not engine.supports("mp4", "png")
+    # Wave 2 outputs: animated and still image from video
+    assert engine.supports("mp4", "gif")
+    assert engine.supports("mp4", "webp")
+    assert engine.supports("mp4", "png")
+    assert engine.supports("mov", "jpg")
+    # but image inputs (still or animated) are not video sources
     assert not engine.supports("png", "mp4")
+    assert not engine.supports("gif", "mp4")
+    assert not engine.supports("webp", "mp4")
 
 
 def test_default_command_has_no_filters() -> None:
@@ -445,6 +452,228 @@ def test_id3_skips_empty_fields() -> None:
         command[index + 1] for index, arg in enumerate(command) if arg == "-metadata"
     ]
     assert metadata_args == ["title=Only Title"]
+
+
+def test_gif_output_uses_palettegen_filter_complex() -> None:
+    command = _build({}, format_in="mp4", format_out="gif")
+
+    assert "-filter_complex" in command
+    fc = command[command.index("-filter_complex") + 1]
+    assert "palettegen=max_colors=256" in fc
+    assert "paletteuse=" in fc
+    assert "fps=12" in fc
+    assert "scale=480:-1:flags=lanczos" in fc
+    # GIF output should loop infinitely and drop audio
+    assert "-loop" in command
+    assert command[command.index("-loop") + 1] == "0"
+    assert "-an" in command
+    # GIF path bypasses default -vf/-af pipeline
+    assert "-vf" not in command
+    assert "-af" not in command
+
+
+def test_gif_fps_and_width_overrides() -> None:
+    command = _build(
+        {"gif_fps": 24, "gif_width": 720},
+        format_in="mp4",
+        format_out="gif",
+    )
+
+    fc = command[command.index("-filter_complex") + 1]
+    assert "fps=24" in fc
+    assert "scale=720:-1:flags=lanczos" in fc
+
+
+def test_gif_preserves_video_filter_chain_before_palette() -> None:
+    command = _build(
+        {"gif_fps": 10, "crop": "320x240+0+0", "rotation_degrees": 90},
+        format_in="mp4",
+        format_out="gif",
+    )
+
+    fc = command[command.index("-filter_complex") + 1]
+    # crop and transpose appear BEFORE the palette pipeline (fps=10)
+    crop_idx = fc.index("crop=320:240:0:0")
+    transpose_idx = fc.index("transpose=1")
+    fps_idx = fc.index("fps=10")
+    assert crop_idx < transpose_idx < fps_idx
+
+
+def test_webp_output_uses_libwebp_codec_and_loop() -> None:
+    command = _build({}, format_in="mp4", format_out="webp")
+
+    vf = command[command.index("-vf") + 1]
+    assert "fps=15" in vf
+    assert "scale=480:-1:flags=lanczos" in vf
+    assert command[command.index("-c:v") + 1] == "libwebp"
+    assert command[command.index("-loop") + 1] == "0"
+    assert "-an" in command
+
+
+def test_webp_quality_override() -> None:
+    command = _build({"webp_quality": 90}, format_in="mp4", format_out="webp")
+
+    assert command[command.index("-q:v") + 1] == "90"
+
+
+def test_thumbnail_grid_filter_uses_select_scale_tile() -> None:
+    command = _build(
+        {"thumbnail_grid": True, "thumbnail_rows": 3, "thumbnail_cols": 5,
+         "thumbnail_interval": 30, "thumbnail_tile_width": 200},
+        format_in="mp4",
+        format_out="png",
+    )
+
+    vf = command[command.index("-vf") + 1]
+    assert "select='not(mod(n\\,30))'" in vf
+    assert "scale=200:-1" in vf
+    assert "tile=5x3" in vf
+    assert "-frames:v" in command
+    assert command[command.index("-frames:v") + 1] == "1"
+    assert "-an" in command
+
+
+def test_image_output_without_thumbnail_grid_uses_single_frame() -> None:
+    command = _build({}, format_in="mp4", format_out="jpg")
+
+    # No thumbnail_grid → no select/tile filter, just single frame
+    assert "-frames:v" in command
+    assert command[command.index("-frames:v") + 1] == "1"
+    assert "-an" in command
+    assert "-vf" not in command  # no filter chain by default
+
+
+def test_image_output_respects_video_filter_chain() -> None:
+    command = _build(
+        {"resolution_preset": "720p"},
+        format_in="mp4",
+        format_out="png",
+    )
+
+    vf = command[command.index("-vf") + 1]
+    assert vf == "scale=1280:-2"
+    assert "-frames:v" in command
+
+
+def test_logo_overlay_emits_filter_complex_with_overlay() -> None:
+    command = _build(
+        {"logo_path": "/tmp/logo.png"},
+        format_in="mp4",
+        format_out="mp4",
+    )
+
+    # Second -i should be the logo
+    inputs = [command[i + 1] for i, arg in enumerate(command) if arg == "-i"]
+    assert inputs == ["in.mp4", "/tmp/logo.png"]
+    fc = command[command.index("-filter_complex") + 1]
+    assert "[1:v]scale=120:-1" in fc
+    assert "[logo]" in fc
+    assert "overlay=W-w-20:H-h-20" in fc
+    assert "[vout]" in fc
+    # Map both video and optional audio
+    map_args = [command[i + 1] for i, arg in enumerate(command) if arg == "-map"]
+    assert "[vout]" in map_args
+    assert "0:a?" in map_args
+
+
+def test_logo_overlay_position_and_opacity() -> None:
+    command = _build(
+        {"logo_path": "/tmp/logo.png", "logo_position": "northwest",
+         "logo_width": 200, "logo_opacity": 50},
+        format_in="mp4",
+        format_out="mp4",
+    )
+
+    fc = command[command.index("-filter_complex") + 1]
+    assert "scale=200:-1" in fc
+    assert "colorchannelmixer=aa=0.50" in fc
+    assert "overlay=20:20" in fc
+
+
+def test_logo_overlay_chains_existing_video_filters() -> None:
+    command = _build(
+        {"logo_path": "/tmp/logo.png", "resolution_preset": "1080p",
+         "rotation_degrees": 90},
+        format_in="mp4",
+        format_out="mp4",
+    )
+
+    fc = command[command.index("-filter_complex") + 1]
+    # video chain processes [0:v] first, producing [v0], then logo overlays on [v0]
+    assert fc.startswith("[0:v]")
+    assert "transpose=1" in fc
+    assert "scale=1920:-2" in fc
+    assert "[v0]" in fc
+    assert "[v0][logo]overlay=" in fc
+
+
+def test_logo_overlay_skipped_for_audio_only_output() -> None:
+    command = _build(
+        {"logo_path": "/tmp/logo.png"},
+        format_in="mp4",
+        format_out="mp3",
+    )
+
+    # Audio-only output ignores logo overlay
+    inputs = [command[i + 1] for i, arg in enumerate(command) if arg == "-i"]
+    assert inputs == ["in.mp4"]
+    assert "-filter_complex" not in command
+
+
+def test_reverse_video_appends_reverse_and_areverse() -> None:
+    command = _build({"reverse_video": True}, format_in="mp4", format_out="mp4")
+
+    vf = command[command.index("-vf") + 1]
+    assert vf == "reverse"
+    af = command[command.index("-af") + 1]
+    assert af == "areverse"
+
+
+def test_reverse_video_chains_after_other_filters() -> None:
+    command = _build(
+        {"reverse_video": True, "resolution_preset": "720p"},
+        format_in="mp4",
+        format_out="mp4",
+    )
+
+    vf = command[command.index("-vf") + 1]
+    chain = vf.split(",")
+    assert chain[-1] == "reverse"
+    assert chain[0] == "scale=1280:-2"
+
+
+def test_subtitle_burn_in_for_srt_uses_subtitles_filter() -> None:
+    command = _build(
+        {"burn_subtitle_path": "/path/to/sub.srt"},
+        format_in="mp4",
+        format_out="mp4",
+    )
+
+    vf = command[command.index("-vf") + 1]
+    assert vf.startswith("subtitles=")
+    assert "/path/to/sub.srt" in vf or "/path/to/sub.srt".replace(":", "\\:") in vf
+
+
+def test_subtitle_burn_in_for_ass_uses_ass_filter() -> None:
+    command = _build(
+        {"burn_subtitle_path": "/path/to/sub.ass"},
+        format_in="mp4",
+        format_out="mp4",
+    )
+
+    vf = command[command.index("-vf") + 1]
+    assert vf.startswith("ass=")
+
+
+def test_subtitle_burn_in_escapes_colons_in_path() -> None:
+    command = _build(
+        {"burn_subtitle_path": "C:/videos/sub.srt"},
+        format_in="mp4",
+        format_out="mp4",
+    )
+
+    vf = command[command.index("-vf") + 1]
+    assert "C\\:/videos/sub.srt" in vf
 
 
 def test_audio_output_skips_video_filters_but_keeps_audio_filters() -> None:

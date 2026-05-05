@@ -3,18 +3,21 @@ from __future__ import annotations
 try:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import (
+        QAbstractSpinBox,
+        QCheckBox,
         QComboBox,
         QGridLayout,
         QHBoxLayout,
         QLabel,
         QLineEdit,
         QListView,
+        QSpinBox,
         QVBoxLayout,
         QWidget,
     )
 except ImportError:  # pragma: no cover
     Qt = None
-    QComboBox = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QVBoxLayout = QWidget = None
+    QAbstractSpinBox = QCheckBox = QComboBox = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QSpinBox = QVBoxLayout = QWidget = None
 
 
 PSM_MODES = (
@@ -66,10 +69,22 @@ class OCROptionsPanel(QWidget):
         self.psm_combo = _combo(self, PSM_MODES)
         self.oem_combo = _combo(self, OEM_MODES)
 
+        self.dpi_input = QSpinBox(self)
+        self.dpi_input.setRange(72, 600)
+        self.dpi_input.setValue(300)
+        self.dpi_input.setSuffix(" DPI")
+        self.dpi_input.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+        self.dpi_input.setAccelerated(True)
+
+        self.auto_rotate_check = QCheckBox(
+            "Auto-rotate pages via OSD pre-pass (PDF input only)", self
+        )
+
         info = QLabel(
             "Languages depend on installed `tesseract-ocr-<lang>` packages "
             "(default install ships eng + osd). PSM tunes page segmentation; "
-            "use 6 for a single block, 7 for a single line.",
+            "use 6 for a single block, 7 for a single line. DPI and auto-rotate "
+            "apply only when the input is a PDF.",
             self,
         )
         info.setWordWrap(True)
@@ -82,6 +97,9 @@ class OCROptionsPanel(QWidget):
         grid.addWidget(self.psm_combo, 1, 1)
         grid.addWidget(_field("Engine mode", self), 1, 2)
         grid.addWidget(self.oem_combo, 1, 3)
+        grid.addWidget(_field("PDF render DPI", self), 2, 0)
+        grid.addWidget(self.dpi_input, 2, 1)
+        grid.addWidget(self.auto_rotate_check, 2, 2, 1, 2)
 
         layout.addLayout(grid)
         layout.addWidget(info)
@@ -109,6 +127,13 @@ class OCROptionsPanel(QWidget):
         oem = self.oem_combo.currentData()
         if oem is not None and oem != 3:
             options["ocr_oem"] = oem
+
+        dpi = self.dpi_input.value()
+        if dpi != 300:
+            options["ocr_dpi"] = dpi
+
+        if self.auto_rotate_check.isChecked():
+            options["ocr_auto_rotate"] = True
 
         return options
 

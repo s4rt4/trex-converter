@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 try:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import (
@@ -7,11 +9,13 @@ try:
         QCheckBox,
         QComboBox,
         QDoubleSpinBox,
+        QFileDialog,
         QGridLayout,
         QHBoxLayout,
         QLabel,
         QLineEdit,
         QListView,
+        QPushButton,
         QSlider,
         QSpinBox,
         QTabWidget,
@@ -20,7 +24,7 @@ try:
     )
 except ImportError:  # pragma: no cover
     Qt = None
-    QAbstractSpinBox = QCheckBox = QComboBox = QDoubleSpinBox = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QSlider = QSpinBox = QTabWidget = QVBoxLayout = QWidget = None
+    QAbstractSpinBox = QCheckBox = QComboBox = QDoubleSpinBox = QFileDialog = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QPushButton = QSlider = QSpinBox = QTabWidget = QVBoxLayout = QWidget = None
 
 
 ROTATIONS = (
@@ -81,6 +85,10 @@ class VideoOptionsPanel(QWidget):
         tabs.addTab(self._build_resize_page(tabs), "Resize")
         tabs.addTab(self._build_compress_page(tabs), "Compress")
         tabs.addTab(self._build_watermark_page(tabs), "Watermark")
+        tabs.addTab(self._build_effects_page(tabs), "Effects")
+        tabs.addTab(self._build_animation_page(tabs), "Animation")
+        tabs.addTab(self._build_thumbnails_page(tabs), "Thumbnails")
+        tabs.addTab(self._build_subtitles_page(tabs), "Subtitles")
 
     def _build_trim_page(self, parent: QWidget) -> QWidget:
         page = QWidget(parent)
@@ -220,6 +228,214 @@ class VideoOptionsPanel(QWidget):
         )
         return page
 
+    def _build_effects_page(self, parent: QWidget) -> QWidget:
+        page = QWidget(parent)
+        grid = QGridLayout(page)
+        _grid_setup(grid)
+
+        self.reverse_check = QCheckBox("Reverse video (and audio)", page)
+
+        self.logo_path_input = QLineEdit(page)
+        self.logo_path_input.setPlaceholderText("/path/to/logo.png (empty = no logo)")
+        self.logo_browse_button = QPushButton("Browse", page)
+        self.logo_browse_button.clicked.connect(self._choose_logo)
+
+        self.logo_position_combo = _combo(page, GRAVITIES)
+        for index, (_, value) in enumerate(GRAVITIES):
+            if value == "southeast":
+                self.logo_position_combo.setCurrentIndex(index)
+                break
+
+        self.logo_width_input = QSpinBox(page)
+        self.logo_width_input.setRange(16, 4096)
+        self.logo_width_input.setValue(120)
+        self.logo_width_input.setSuffix(" px")
+        _use_stepper(self.logo_width_input)
+
+        self.logo_opacity_slider, self.logo_opacity_label = _slider(
+            page, 0, 100, 100, suffix="%"
+        )
+
+        info = QLabel(
+            "Logo overlay scales the image to the chosen width and overlays it at the "
+            "selected position. Reverse keeps audio in sync via areverse.",
+            page,
+        )
+        info.setWordWrap(True)
+
+        grid.addWidget(self.reverse_check, 0, 0, 1, 4)
+        grid.addWidget(_field("Logo path", page), 1, 0)
+        logo_row = QHBoxLayout()
+        logo_row.setSpacing(8)
+        logo_row.addWidget(self.logo_path_input, 1)
+        logo_row.addWidget(self.logo_browse_button)
+        grid.addLayout(logo_row, 1, 1, 1, 3)
+        grid.addWidget(_field("Position", page), 2, 0)
+        grid.addWidget(self.logo_position_combo, 2, 1)
+        grid.addWidget(_field("Width", page), 2, 2)
+        grid.addWidget(self.logo_width_input, 2, 3)
+        grid.addWidget(_field("Opacity", page), 3, 0)
+        grid.addLayout(
+            _slider_row(self.logo_opacity_slider, self.logo_opacity_label),
+            3, 1, 1, 3,
+        )
+        grid.addWidget(info, 4, 0, 1, 4)
+        return page
+
+    def _build_animation_page(self, parent: QWidget) -> QWidget:
+        page = QWidget(parent)
+        grid = QGridLayout(page)
+        _grid_setup(grid)
+
+        self.gif_fps_input = QSpinBox(page)
+        self.gif_fps_input.setRange(1, 60)
+        self.gif_fps_input.setValue(12)
+        self.gif_fps_input.setSuffix(" fps")
+        _use_stepper(self.gif_fps_input)
+
+        self.gif_width_input = QSpinBox(page)
+        self.gif_width_input.setRange(64, 4096)
+        self.gif_width_input.setValue(480)
+        self.gif_width_input.setSuffix(" px")
+        _use_stepper(self.gif_width_input)
+
+        self.webp_fps_input = QSpinBox(page)
+        self.webp_fps_input.setRange(1, 60)
+        self.webp_fps_input.setValue(15)
+        self.webp_fps_input.setSuffix(" fps")
+        _use_stepper(self.webp_fps_input)
+
+        self.webp_width_input = QSpinBox(page)
+        self.webp_width_input.setRange(64, 4096)
+        self.webp_width_input.setValue(480)
+        self.webp_width_input.setSuffix(" px")
+        _use_stepper(self.webp_width_input)
+
+        self.webp_quality_input = QSpinBox(page)
+        self.webp_quality_input.setRange(0, 100)
+        self.webp_quality_input.setValue(75)
+        _use_stepper(self.webp_quality_input)
+
+        info = QLabel(
+            "These options apply when output format is gif or webp. Lower fps and "
+            "width keep file size down. WebP quality 0–100 (75 default).",
+            page,
+        )
+        info.setWordWrap(True)
+
+        grid.addWidget(_field("GIF fps", page), 0, 0)
+        grid.addWidget(self.gif_fps_input, 0, 1)
+        grid.addWidget(_field("GIF width", page), 0, 2)
+        grid.addWidget(self.gif_width_input, 0, 3)
+        grid.addWidget(_field("WebP fps", page), 1, 0)
+        grid.addWidget(self.webp_fps_input, 1, 1)
+        grid.addWidget(_field("WebP width", page), 1, 2)
+        grid.addWidget(self.webp_width_input, 1, 3)
+        grid.addWidget(_field("WebP quality", page), 2, 0)
+        grid.addWidget(self.webp_quality_input, 2, 1)
+        grid.addWidget(info, 3, 0, 1, 4)
+        return page
+
+    def _build_thumbnails_page(self, parent: QWidget) -> QWidget:
+        page = QWidget(parent)
+        grid = QGridLayout(page)
+        _grid_setup(grid)
+
+        self.thumbnail_grid_check = QCheckBox(
+            "Build contact sheet (PNG/JPG output)", page
+        )
+        self.thumbnail_grid_check.setChecked(True)
+
+        self.thumbnail_rows_input = QSpinBox(page)
+        self.thumbnail_rows_input.setRange(1, 16)
+        self.thumbnail_rows_input.setValue(4)
+        _use_stepper(self.thumbnail_rows_input)
+
+        self.thumbnail_cols_input = QSpinBox(page)
+        self.thumbnail_cols_input.setRange(1, 16)
+        self.thumbnail_cols_input.setValue(4)
+        _use_stepper(self.thumbnail_cols_input)
+
+        self.thumbnail_interval_input = QSpinBox(page)
+        self.thumbnail_interval_input.setRange(1, 100000)
+        self.thumbnail_interval_input.setValue(60)
+        self.thumbnail_interval_input.setSuffix(" frames")
+        _use_stepper(self.thumbnail_interval_input)
+
+        self.thumbnail_tile_width_input = QSpinBox(page)
+        self.thumbnail_tile_width_input.setRange(64, 4096)
+        self.thumbnail_tile_width_input.setValue(320)
+        self.thumbnail_tile_width_input.setSuffix(" px")
+        _use_stepper(self.thumbnail_tile_width_input)
+
+        info = QLabel(
+            "Contact sheet picks every Nth frame, scales each tile, and arranges "
+            "them in a grid. Disable to extract a single frame at the trim start.",
+            page,
+        )
+        info.setWordWrap(True)
+
+        grid.addWidget(self.thumbnail_grid_check, 0, 0, 1, 4)
+        grid.addWidget(_field("Rows", page), 1, 0)
+        grid.addWidget(self.thumbnail_rows_input, 1, 1)
+        grid.addWidget(_field("Cols", page), 1, 2)
+        grid.addWidget(self.thumbnail_cols_input, 1, 3)
+        grid.addWidget(_field("Interval", page), 2, 0)
+        grid.addWidget(self.thumbnail_interval_input, 2, 1)
+        grid.addWidget(_field("Tile width", page), 2, 2)
+        grid.addWidget(self.thumbnail_tile_width_input, 2, 3)
+        grid.addWidget(info, 3, 0, 1, 4)
+        return page
+
+    def _build_subtitles_page(self, parent: QWidget) -> QWidget:
+        page = QWidget(parent)
+        grid = QGridLayout(page)
+        _grid_setup(grid)
+
+        self.burn_subtitle_input = QLineEdit(page)
+        self.burn_subtitle_input.setPlaceholderText(
+            "/path/to/sub.srt (empty = no burn-in)"
+        )
+        self.burn_subtitle_browse = QPushButton("Browse", page)
+        self.burn_subtitle_browse.clicked.connect(self._choose_subtitle)
+
+        info = QLabel(
+            "Burn-in hardcodes subtitles into the video using FFmpeg's subtitles "
+            "filter (.srt/.vtt) or ass filter (.ass/.ssa). The subtitle file is "
+            "embedded into every output frame.",
+            page,
+        )
+        info.setWordWrap(True)
+
+        grid.addWidget(_field("Subtitle file", page), 0, 0)
+        sub_row = QHBoxLayout()
+        sub_row.setSpacing(8)
+        sub_row.addWidget(self.burn_subtitle_input, 1)
+        sub_row.addWidget(self.burn_subtitle_browse)
+        grid.addLayout(sub_row, 0, 1, 1, 3)
+        grid.addWidget(info, 1, 0, 1, 4)
+        return page
+
+    def _choose_logo(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose logo image",
+            "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp)",
+        )
+        if path:
+            self.logo_path_input.setText(path)
+
+    def _choose_subtitle(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose subtitle file",
+            "",
+            "Subtitles (*.srt *.vtt *.ass *.ssa)",
+        )
+        if path:
+            self.burn_subtitle_input.setText(path)
+
     def collect_options(self) -> dict:
         options: dict[str, object] = {}
 
@@ -264,6 +480,35 @@ class VideoOptionsPanel(QWidget):
             )
             options["watermark_size"] = self.watermark_size_input.value()
             options["watermark_opacity"] = self.watermark_opacity_slider.value()
+
+        if self.reverse_check.isChecked():
+            options["reverse_video"] = True
+
+        logo_path = self.logo_path_input.text().strip()
+        if logo_path:
+            options["logo_path"] = logo_path
+            options["logo_position"] = (
+                self.logo_position_combo.currentData() or "southeast"
+            )
+            options["logo_width"] = self.logo_width_input.value()
+            options["logo_opacity"] = self.logo_opacity_slider.value()
+
+        if self.thumbnail_grid_check.isChecked():
+            options["thumbnail_grid"] = True
+            options["thumbnail_rows"] = self.thumbnail_rows_input.value()
+            options["thumbnail_cols"] = self.thumbnail_cols_input.value()
+            options["thumbnail_interval"] = self.thumbnail_interval_input.value()
+            options["thumbnail_tile_width"] = self.thumbnail_tile_width_input.value()
+
+        options["gif_fps"] = self.gif_fps_input.value()
+        options["gif_width"] = self.gif_width_input.value()
+        options["webp_fps"] = self.webp_fps_input.value()
+        options["webp_width"] = self.webp_width_input.value()
+        options["webp_quality"] = self.webp_quality_input.value()
+
+        burn_path = self.burn_subtitle_input.text().strip()
+        if burn_path:
+            options["burn_subtitle_path"] = burn_path
 
         return options
 

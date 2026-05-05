@@ -93,7 +93,7 @@ PAGE_CONFIGS = (
     ),
     ConversionPageConfig(
         title="Subtitle",
-        input_formats=("srt", "vtt"),
+        input_formats=("srt", "vtt", "ass"),
         default_output="vtt",
         engine_name="subtitle",
         kind="subtitle",
@@ -102,7 +102,7 @@ PAGE_CONFIGS = (
     ),
     ConversionPageConfig(
         title="OCR",
-        input_formats=("png", "jpg", "jpeg", "tif", "tiff", "bmp"),
+        input_formats=("png", "jpg", "jpeg", "tif", "tiff", "bmp", "pdf"),
         default_output="txt",
         engine_name="tesseract",
         kind="ocr",

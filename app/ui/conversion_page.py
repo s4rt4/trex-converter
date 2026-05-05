@@ -322,7 +322,10 @@ class ConversionPage(QWidget):
         if self.config.kind == "image":
             return output in set(IMAGE_FORMATS)
         if self.config.kind == "video":
-            return output in {"mp4", "mov", "mkv", "webm"}
+            return output in {
+                "mp4", "mov", "mkv", "webm",
+                "gif", "webp", "png", "jpg", "jpeg",
+            }
         if self.config.kind == "audio":
             return output in {"mp3", "wav", "aac", "flac", "m4a", "opus", "ogg"}
         if self.config.kind == "document":
@@ -336,7 +339,7 @@ class ConversionPage(QWidget):
         if self.config.kind == "ocr":
             return output in {"txt", "pdf", "hocr", "tsv"}
         if self.config.kind == "subtitle":
-            return output in {"srt", "vtt"}
+            return output in {"srt", "vtt", "ass"}
         return True
 
 
