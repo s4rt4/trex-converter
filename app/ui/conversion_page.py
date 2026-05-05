@@ -50,6 +50,7 @@ class ConversionPageConfig:
     extra_options_factory: Callable[[QWidget], QWidget] | None = None
     force_engine: bool = False
     directory_output: bool = False
+    directory_input: bool = False
     multi_input: bool = False
     default_options: tuple[tuple[str, object], ...] = ()
 
@@ -252,6 +253,19 @@ class ConversionPage(QWidget):
         self.queue_panel.set_tasks([task for task in tasks if self._matches(task)])
 
     def _choose_input(self) -> None:
+        if self.config.directory_input:
+            picked = QFileDialog.getExistingDirectory(
+                self, f"Select input folder for {self.config.title}"
+            )
+            if not picked:
+                return
+            folder = Path(picked)
+            self._input_paths = [folder]
+            self.input_display.setText(str(folder))
+            self._populate_outputs(folder)
+            self._update_output_path()
+            return
+
         filters = " ".join(f"*.{fmt}" for fmt in self.config.input_formats)
         if self.config.multi_input:
             picked = _get_open_file_names(
@@ -338,9 +352,10 @@ class ConversionPage(QWidget):
             self.output_display.setText(output_name)
 
     def _populate_outputs(self, input_path: Path) -> None:
+        format_in = self._format_in_for(input_path)
         outputs = [
             output
-            for output in self.registry.list_supported_outputs(input_path.suffix)
+            for output in self.registry.list_supported_outputs(format_in)
             if self._output_belongs_to_page(output)
         ]
         if self.config.default_output in outputs:
@@ -360,6 +375,9 @@ class ConversionPage(QWidget):
         if self.config.directory_output:
             base = Path(output_dir) if output_dir else primary.parent
             target = base / primary.stem
+        elif self.config.directory_input:
+            base = Path(output_dir) if output_dir else primary.parent
+            target = base / f"{primary.name}.{suffix}"
         elif output_dir:
             target = Path(output_dir) / f"{primary.stem}.{suffix}"
         else:
@@ -376,22 +394,28 @@ class ConversionPage(QWidget):
             QMessageBox.warning(self, "Output Required", "No output format is available for this input.")
             return
         output_path = Path(self.output_display.text())
+        format_in = self._format_in_for(primary)
         if self.config.force_engine:
             engine_name = self.config.engine_name
         else:
-            engine_name = self.registry.resolve(primary.suffix, format_out).name
+            engine_name = self.registry.resolve(format_in, format_out).name
         extra_inputs = list(self._input_paths[1:])
         self._on_enqueue(
             Task(
                 input_path=primary,
                 output_path=output_path,
-                format_in=primary.suffix,
+                format_in=format_in,
                 format_out=format_out,
                 engine=engine_name,
                 options=self._options(),
                 extra_inputs=extra_inputs,
             )
         )
+
+    def _format_in_for(self, input_path: Path) -> str:
+        if self.config.directory_input and self.config.input_formats:
+            return self.config.input_formats[0]
+        return input_path.suffix
 
     def _options(self) -> dict:
         options: dict[str, object] = dict(self.config.default_options)
@@ -462,6 +486,8 @@ class ConversionPage(QWidget):
             return output in {"srt", "vtt", "ass"}
         if self.config.kind == "archive":
             return output == "folder"
+        if self.config.kind == "archive-compress":
+            return output in {"zip", "tar", "tgz", "tbz", "txz"}
         if self.config.kind == "qr":
             return output in {"png", "svg", "txt"}
         return True

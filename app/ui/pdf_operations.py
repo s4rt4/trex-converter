@@ -57,7 +57,13 @@ GRAVITIES = (
     ("Bottom", "south"),
     ("Bottom-Right", "southeast"),
 )
-TAB_OPERATIONS = ("pages", "security", "compress", "watermark", "metadata")
+REDACT_COLORS = (
+    ("Black", "black"),
+    ("White", "white"),
+    ("Red", "red"),
+    ("Yellow", "yellow"),
+)
+TAB_OPERATIONS = ("pages", "security", "compress", "watermark", "redact", "metadata")
 
 
 class PDFOperationsPanel(QWidget):
@@ -78,6 +84,7 @@ class PDFOperationsPanel(QWidget):
         self.tabs.addTab(self._build_security_tab(self.tabs), "Security")
         self.tabs.addTab(self._build_compress_tab(self.tabs), "Compress")
         self.tabs.addTab(self._build_watermark_tab(self.tabs), "Watermark")
+        self.tabs.addTab(self._build_redact_tab(self.tabs), "Redact")
         self.tabs.addTab(self._build_metadata_tab(self.tabs), "Metadata")
 
     def _build_pages_tab(self, parent: QWidget) -> QWidget:
@@ -209,6 +216,36 @@ class PDFOperationsPanel(QWidget):
         if path:
             self.watermark_image_input.setText(path)
 
+    def _build_redact_tab(self, parent: QWidget) -> QWidget:
+        page = QWidget(parent)
+        grid = QGridLayout(page)
+        _grid_setup(grid)
+
+        self.redact_terms_input = QLineEdit(page)
+        self.redact_terms_input.setPlaceholderText(
+            "Comma-separated, e.g. John Doe, 555-0100, secret"
+        )
+        self.redact_color_combo = _combo(page, REDACT_COLORS)
+        self.redact_pages_input = QLineEdit(page)
+        self.redact_pages_input.setPlaceholderText("1-3,5 (empty = all pages)")
+
+        info = QLabel(
+            "Search-and-redact: each term is located on every page (case-sensitive) "
+            "and overwritten with the chosen fill color. The original glyphs are "
+            "removed via apply_redactions, not just covered.",
+            page,
+        )
+        info.setWordWrap(True)
+
+        grid.addWidget(_field("Search terms", page), 0, 0)
+        grid.addWidget(self.redact_terms_input, 0, 1, 1, 3)
+        grid.addWidget(_field("Color", page), 1, 0)
+        grid.addWidget(self.redact_color_combo, 1, 1)
+        grid.addWidget(_field("Pages", page), 1, 2)
+        grid.addWidget(self.redact_pages_input, 1, 3)
+        grid.addWidget(info, 2, 0, 1, 4)
+        return page
+
     def _build_metadata_tab(self, parent: QWidget) -> QWidget:
         page = QWidget(parent)
         grid = QGridLayout(page)
@@ -303,6 +340,18 @@ class PDFOperationsPanel(QWidget):
                 options["watermark_position"] = position
                 options["watermark_size"] = self.watermark_size_input.value()
                 options["watermark_opacity"] = opacity
+            return options
+
+        if tab == "redact":
+            terms = self.redact_terms_input.text().strip()
+            options = {
+                "operation": "redact",
+                "redact_terms": terms,
+                "redact_color": self.redact_color_combo.currentData() or "black",
+            }
+            pages = self.redact_pages_input.text().strip()
+            if pages:
+                options["pages"] = pages
             return options
 
         if tab == "metadata":

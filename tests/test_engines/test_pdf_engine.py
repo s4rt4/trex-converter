@@ -1175,3 +1175,108 @@ async def test_unsupported_folder_operation_raises(tmp_path) -> None:
 
     with pytest.raises(RuntimeError, match="Unsupported folder operation"):
         await PDFEngine().convert(task)
+
+
+# ---- PDF redaction ----
+
+
+def _make_pdf_with_text(path, fitz, pages: list[str]) -> None:
+    document = fitz.open()
+    for text in pages:
+        page = document.new_page(width=400, height=400)
+        page.insert_text((50, 100), text, fontsize=14)
+    document.save(str(path))
+    document.close()
+
+
+@pytest.mark.asyncio
+async def test_redact_blacks_out_search_terms(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    _make_pdf_with_text(
+        src,
+        fitz,
+        ["Account Holder: Jane Doe", "Phone: 555-0100 contact"],
+    )
+    out = tmp_path / "redacted.pdf"
+
+    task = Task(
+        input_path=src,
+        output_path=out,
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "redact", "redact_terms": "Jane Doe, 555-0100"},
+    )
+    await PDFEngine().convert(task)
+
+    assert out.exists()
+    redacted = fitz.open(str(out))
+    try:
+        text_all = "\n".join(
+            redacted.load_page(i).get_text() for i in range(len(redacted))
+        )
+    finally:
+        redacted.close()
+    assert "Jane Doe" not in text_all
+    assert "555-0100" not in text_all
+    assert "Account Holder" in text_all
+
+
+@pytest.mark.asyncio
+async def test_redact_supports_color_preset(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    _make_pdf_with_text(src, fitz, ["secret data here"])
+    out = tmp_path / "redacted.pdf"
+
+    task = Task(
+        input_path=src,
+        output_path=out,
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={
+            "operation": "redact",
+            "redact_terms": "secret",
+            "redact_color": "red",
+        },
+    )
+    await PDFEngine().convert(task)
+    assert out.exists()
+
+
+@pytest.mark.asyncio
+async def test_redact_requires_terms(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    _make_pdf_with_text(src, fitz, ["hello"])
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.pdf",
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "redact", "redact_terms": ""},
+    )
+    with pytest.raises(RuntimeError, match="redact_terms"):
+        await PDFEngine().convert(task)
+
+
+@pytest.mark.asyncio
+async def test_redact_no_match_raises(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    _make_pdf_with_text(src, fitz, ["hello world"])
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.pdf",
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "redact", "redact_terms": "absent-term"},
+    )
+    with pytest.raises(RuntimeError, match="No redactable matches"):
+        await PDFEngine().convert(task)

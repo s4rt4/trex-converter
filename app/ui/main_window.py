@@ -250,6 +250,15 @@ PAGE_CONFIGS = (
         directory_output=True,
     ),
     ConversionPageConfig(
+        title="Archive Compress",
+        input_formats=("folder",),
+        default_output="zip",
+        engine_name="archive",
+        kind="archive-compress",
+        force_engine=True,
+        directory_input=True,
+    ),
+    ConversionPageConfig(
         title="QR / Barcode",
         input_formats=(
             "txt",
@@ -939,6 +948,7 @@ def _page_icon(kind: str):
         "dashboard": "fa5s.chart-pie",
         "about": "fa5s.info-circle",
         "archive": "fa5s.file-archive",
+        "archive-compress": "fa5s.compress",
         "qr": "fa5s.qrcode",
     }
     return surface_icon(icons.get(kind, "fa5s.file"))

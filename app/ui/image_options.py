@@ -104,6 +104,11 @@ class ImageOptionsPanel(QWidget):
         self.density_input.setSuffix(" dpi")
         _use_stepper(self.density_input)
 
+        self.fit_canvas_input = QLineEdit(page)
+        self.fit_canvas_input.setPlaceholderText("1920x1080 (letterbox to canvas)")
+        self.fit_canvas_background_input = QLineEdit(page)
+        self.fit_canvas_background_input.setPlaceholderText("white or #RRGGBB")
+
         grid.addWidget(_field("Rotate", page), 0, 0)
         grid.addWidget(self.rotate_combo, 0, 1)
         grid.addWidget(_field("Aspect crop", page), 0, 2)
@@ -121,6 +126,10 @@ class ImageOptionsPanel(QWidget):
         grid.addWidget(self.resize_input, 3, 3)
         grid.addWidget(_field("Density", page), 4, 0)
         grid.addWidget(self.density_input, 4, 1)
+        grid.addWidget(_field("Fit canvas", page), 5, 0)
+        grid.addWidget(self.fit_canvas_input, 5, 1)
+        grid.addWidget(_field("Canvas bg", page), 5, 2)
+        grid.addWidget(self.fit_canvas_background_input, 5, 3)
 
         return page
 
@@ -325,6 +334,13 @@ class ImageOptionsPanel(QWidget):
 
         if self.density_input.value() > 0:
             options["density"] = self.density_input.value()
+
+        fit_canvas = self.fit_canvas_input.text().strip()
+        if fit_canvas:
+            options["fit_canvas"] = fit_canvas
+            bg = self.fit_canvas_background_input.text().strip()
+            if bg:
+                options["fit_canvas_background"] = bg
 
         if self.grayscale_check.isChecked():
             options["grayscale"] = True

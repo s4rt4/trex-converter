@@ -364,3 +364,94 @@ async def test_slides_to_images_invalid_format_raises(tmp_path) -> None:
 
     with pytest.raises(RuntimeError, match="slides_image_format"):
         await LibreOfficeEngine().convert(task)
+
+
+# ---- Password-protected PDF export ----
+
+
+@pytest.mark.asyncio
+async def test_pdf_password_routes_through_writer_pdf_filter(tmp_path, monkeypatch) -> None:
+    fake_libreoffice = tmp_path / "libreoffice"
+    fake_libreoffice.write_text(
+        "#!/bin/sh\n"
+        "echo \"$@\" > \"$0.args\"\n"
+        "while [ \"$#\" -gt 0 ]; do\n"
+        "  case \"$1\" in\n"
+        "    --outdir) shift; outdir=\"$1\";;\n"
+        "    --convert-to) shift; ;;\n"
+        "    *) input=\"$1\" ;;\n"
+        "  esac\n"
+        "  shift\n"
+        "done\n"
+        "base=$(basename \"$input\")\n"
+        "stem=${base%.*}\n"
+        "printf 'pwd-data' > \"$outdir/$stem.pdf\"\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_libreoffice.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    src = tmp_path / "secret.docx"
+    src.write_text("secret", encoding="utf-8")
+    out = tmp_path / "out.pdf"
+
+    task = Task(
+        input_path=src,
+        output_path=out,
+        format_in="docx",
+        format_out="pdf",
+        engine="libreoffice",
+        options={"pdf_password_user": "open-me", "pdf_password_owner": "edit-me"},
+    )
+
+    await LibreOfficeEngine().convert(task)
+
+    args = (tmp_path / "libreoffice.args").read_text(encoding="utf-8")
+    assert "EncryptFile" in args
+    assert "DocumentOpenPassword" in args
+    assert "open-me" in args
+    assert "RestrictPermissions" in args
+    assert "PermissionPassword" in args
+    assert "edit-me" in args
+
+
+@pytest.mark.asyncio
+async def test_pdf_password_combines_with_pdf_a_flag(tmp_path, monkeypatch) -> None:
+    fake_libreoffice = tmp_path / "libreoffice"
+    fake_libreoffice.write_text(
+        "#!/bin/sh\n"
+        "echo \"$@\" > \"$0.args\"\n"
+        "while [ \"$#\" -gt 0 ]; do\n"
+        "  case \"$1\" in\n"
+        "    --outdir) shift; outdir=\"$1\";;\n"
+        "    --convert-to) shift; ;;\n"
+        "    *) input=\"$1\" ;;\n"
+        "  esac\n"
+        "  shift\n"
+        "done\n"
+        "base=$(basename \"$input\")\n"
+        "stem=${base%.*}\n"
+        "printf 'data' > \"$outdir/$stem.pdf\"\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_libreoffice.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    src = tmp_path / "doc.docx"
+    src.write_text("x", encoding="utf-8")
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.pdf",
+        format_in="docx",
+        format_out="pdf",
+        engine="libreoffice",
+        options={"pdf_a": True, "pdf_password_user": "p1"},
+    )
+
+    await LibreOfficeEngine().convert(task)
+    args = (tmp_path / "libreoffice.args").read_text(encoding="utf-8")
+    assert "SelectPdfVersion" in args
+    assert "EncryptFile" in args
+    assert "p1" in args

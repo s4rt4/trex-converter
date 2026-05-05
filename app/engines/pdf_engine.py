@@ -33,6 +33,7 @@ PDF_OPERATIONS = {
     "watermark_text",
     "watermark_image",
     "page_numbering",
+    "redact",
     "merge",
 }
 PDF_FOLDER_OPERATIONS = {"split", "extract_images", "extract_attachments"}
@@ -374,6 +375,7 @@ class PDFEngine(BaseEngine):
                 "watermark_text": _op_watermark_text,
                 "watermark_image": _op_watermark_image,
                 "page_numbering": _op_page_numbering,
+                "redact": _op_redact,
             }[operation]
 
             handler(document, fitz, task, page_count)
@@ -570,6 +572,70 @@ def _op_page_numbering(document, fitz: ModuleType, task: Task, page_count: int) 
         f"Numbered {numbered} page(s) with format '{template}' "
         f"(start={start}, skip={skip}, gravity={gravity})"
     )
+
+
+def _op_redact(document, fitz: ModuleType, task: Task, page_count: int) -> None:
+    raw_terms = task.options.get("redact_terms")
+    if isinstance(raw_terms, (list, tuple)):
+        terms = [str(t).strip() for t in raw_terms if str(t).strip()]
+    else:
+        terms = [t.strip() for t in str(raw_terms or "").split(",") if t.strip()]
+    if not terms:
+        raise RuntimeError(
+            "Redaction requires redact_terms (comma-separated text to black out)"
+        )
+
+    fill_color = _parse_color(
+        task.options.get("redact_color"), default=(0.0, 0.0, 0.0)
+    )
+    pages_filter = _parse_page_range(task.options.get("pages"), page_count)
+    target_pages = pages_filter or list(range(page_count))
+
+    total_marks = 0
+    for index in target_pages:
+        page = document.load_page(index)
+        marks = 0
+        for term in terms:
+            for rect in page.search_for(term):
+                page.add_redact_annot(rect, fill=fill_color)
+                marks += 1
+        if marks:
+            page.apply_redactions()
+            total_marks += marks
+
+    if total_marks == 0:
+        raise RuntimeError(
+            f"No redactable matches found for terms: {', '.join(terms)}"
+        )
+    task.append_log(
+        f"Redacted {total_marks} match(es) of {len(terms)} term(s) "
+        f"across {len(target_pages)} page(s)"
+    )
+
+
+def _parse_color(value: object, default: tuple[float, float, float]) -> tuple[float, float, float]:
+    if value is None or value == "":
+        return default
+    if isinstance(value, (list, tuple)) and len(value) == 3:
+        return (float(value[0]), float(value[1]), float(value[2]))
+    text = str(value).strip().lower()
+    presets = {
+        "black": (0.0, 0.0, 0.0),
+        "white": (1.0, 1.0, 1.0),
+        "red": (1.0, 0.0, 0.0),
+        "yellow": (1.0, 1.0, 0.0),
+    }
+    if text in presets:
+        return presets[text]
+    if text.startswith("#") and len(text) == 7:
+        try:
+            r = int(text[1:3], 16) / 255.0
+            g = int(text[3:5], 16) / 255.0
+            b = int(text[5:7], 16) / 255.0
+            return (r, g, b)
+        except ValueError:
+            return default
+    return default
 
 
 def _safe_attachment_name(name: str) -> str:

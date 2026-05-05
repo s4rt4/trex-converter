@@ -324,3 +324,49 @@ def test_watermark_image_full_opacity_skips_evaluate_block() -> None:
     inside = command[paren_open + 1 : paren_close]
     # Default opacity is 100 -> no alpha channel manipulation
     assert "-evaluate" not in inside
+
+
+def test_fit_canvas_emits_resize_extent_with_background() -> None:
+    command = _build(
+        {
+            "fit_canvas": "1920x1080",
+            "fit_canvas_background": "black",
+        }
+    )
+
+    resize_index = command.index("-resize")
+    extent_index = command.index("-extent")
+    assert command[resize_index + 1] == "1920x1080"
+    assert command[extent_index + 1] == "1920x1080"
+    bg_index = command.index("-background")
+    assert command[bg_index + 1] == "black"
+    gravity_index = command.index("-gravity")
+    assert command[gravity_index + 1] == "center"
+
+
+def test_fit_canvas_default_background_is_white() -> None:
+    command = _build({"fit_canvas": "800x600"})
+
+    bg_index = command.index("-background")
+    assert command[bg_index + 1] == "white"
+
+
+def test_fit_canvas_overrides_resize_value() -> None:
+    command = _build(
+        {
+            "fit_canvas": "1024x1024",
+            "resize": "100",
+            "resize_mode": "percent",
+        }
+    )
+
+    # When fit_canvas is set, the regular resize should not be appended again.
+    assert command.count("-resize") == 1
+    assert command[command.index("-resize") + 1] == "1024x1024"
+    # Percent resize would have produced "100%" — should be absent.
+    assert "100%" not in command
+
+
+def test_fit_canvas_invalid_size_raises() -> None:
+    with pytest.raises(RuntimeError, match="fit_canvas"):
+        _build({"fit_canvas": "wide"})

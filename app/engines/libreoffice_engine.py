@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -240,15 +241,34 @@ class LibreOfficeEngine(BaseEngine):
 
 
 def _convert_to_format(format_out: str, options: dict) -> str:
-    """Build the --convert-to argument, honoring the pdf_a flag for PDF outputs."""
+    """Build the --convert-to argument, honoring PDF flags (pdf_a, password)."""
     suffix = format_out.lower()
-    if suffix == "pdf" and options.get("pdf_a"):
-        # SelectPdfVersion=1 -> PDF/A-1a (LibreOffice writer_pdf_Export filter).
-        return (
-            'pdf:writer_pdf_Export:'
-            '{"SelectPdfVersion":{"type":"long","value":"1"}}'
-        )
-    return suffix
+    if suffix != "pdf":
+        return suffix
+
+    filter_data: dict[str, dict[str, str]] = {}
+    if options.get("pdf_a"):
+        filter_data["SelectPdfVersion"] = {"type": "long", "value": "1"}
+
+    user_pw = _str_option(options.get("pdf_password_user"))
+    owner_pw = _str_option(options.get("pdf_password_owner"))
+    if user_pw:
+        filter_data["EncryptFile"] = {"type": "boolean", "value": "true"}
+        filter_data["DocumentOpenPassword"] = {"type": "string", "value": user_pw}
+    if owner_pw:
+        filter_data["RestrictPermissions"] = {"type": "boolean", "value": "true"}
+        filter_data["PermissionPassword"] = {"type": "string", "value": owner_pw}
+
+    if not filter_data:
+        return suffix
+    return "pdf:writer_pdf_Export:" + json.dumps(filter_data, separators=(",", ":"))
+
+
+def _str_option(value: object) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    return text
 
 
 def _timeout_seconds(task: Task) -> float:

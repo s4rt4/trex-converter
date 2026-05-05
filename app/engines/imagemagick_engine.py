@@ -133,8 +133,22 @@ class ImageMagickEngine(BaseEngine):
         if crop:
             command.extend(["-crop", str(crop), "+repage"])
 
+        fit_canvas = _fit_canvas_size(options.get("fit_canvas"))
+        if fit_canvas:
+            background = str(options.get("fit_canvas_background") or "white")
+            command.extend([
+                "-resize",
+                fit_canvas,
+                "-background",
+                background,
+                "-gravity",
+                "center",
+                "-extent",
+                fit_canvas,
+            ])
+
         resize_value = _resolve_resize(options)
-        if resize_value:
+        if resize_value and not fit_canvas:
             command.extend(["-resize", resize_value])
 
         if options.get("grayscale"):
@@ -268,6 +282,22 @@ def _auto_tile(count: int) -> str:
     cols = int(math.ceil(math.sqrt(count)))
     rows = int(math.ceil(count / cols))
     return f"{cols}x{rows}"
+
+
+_FIT_CANVAS_RE = None  # populated lazily inside _fit_canvas_size
+
+
+def _fit_canvas_size(value: object) -> str | None:
+    if value is None or value == "":
+        return None
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    import re as _re
+
+    if not _re.match(r"^\d+x\d+$", text):
+        raise RuntimeError(f"fit_canvas must look like '1920x1080', got {value}")
+    return text
 
 
 def _resolve_resize(options: dict) -> str | None:

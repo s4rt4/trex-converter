@@ -25,13 +25,13 @@ Sudah ada:
 - FFmpeg engine nyata dengan progress parsing, cancel subprocess, plus opsi lengkap: trim, resolution preset, compress (CRF + libx264 preset), rotate/flip/crop, speed change 0.5x–2.0x, watermark teks via drawtext, reverse, logo overlay (`-filter_complex`), subtitle burn-in (`subtitles=`/`ass=`), GIF creator (palettegen+paletteuse), animated WebP (libwebp + loop=0), contact sheet (select+tile) ke PNG/JPG, single-frame still extraction.
 - Audio module: full audio↔audio matrix (mp3/wav/aac/flac/m4a/opus/ogg) + video→audio extract; trim, fade-in/out, gain, loudnorm EBU R128, channel down-mix, sample-rate convert.
 - Tesseract OCR engine nyata: image (png/jpg/jpeg/tif/tiff/bmp) DAN PDF input → searchable PDF / TXT / hOCR / TSV. PDF pipeline: render setiap halaman dengan PyMuPDF (default 300 DPI), OCR per halaman, stitch (PDF via `insert_pdf`, TXT dengan `\f`, hOCR concat ocr_page divs + renumber ID, TSV header tunggal + rows). Auto-rotate via OSD pre-pass (`tesseract --psm 0`) parsing `Rotate:` lalu re-render via `page.set_rotation`. Language picker (eng/ind/eng+ind plus custom), PSM, OEM. Routed via `force_engine` flag pada page + `ConversionRegistry.engine_by_name` + `TaskQueue.engine_by_name`.
-- LibreOffice engine: format matrix penuh (text/spreadsheet/presentation), 52 pairs. Plus PDF/A archival output (filter `pdf:writer_pdf_Export:{"SelectPdfVersion":{"type":"long","value":"1"}}`) dan slide rendering (presentation × {folder}, dispatch `slides_to_images`: convert ke PDF tempdir, lalu PyMuPDF Pixmap render setiap halaman ke PNG/JPG di DPI configurable).
+- LibreOffice engine: format matrix penuh (text/spreadsheet/presentation), 52 pairs. PDF output filter di-build via `_convert_to_format` JSON dict yang gabungkan `pdf_a` (PDF/A-1a archival, SelectPdfVersion=1), `pdf_password_user` (DocumentOpenPassword + EncryptFile), dan `pdf_password_owner` (PermissionPassword + RestrictPermissions). Plus slide rendering (presentation × {folder}, dispatch `slides_to_images`: convert ke PDF tempdir, lalu PyMuPDF Pixmap render setiap halaman ke PNG/JPG di DPI configurable).
 - Subtitle engine Python-pure: SRT ↔ VTT ↔ ASS round-trip dengan time shift. ASS parser handle Format header detection, Dialogue rows dengan koma di text, `\N` escape, Comment skip. ASS formatter emit Script Info + V4+ Styles + Events dengan default Arial 32 white style. Engine `requires_binary=""` di-allow oleh DependencyChecker.
-- Archive engine Python-pure (stdlib `zipfile` + `tarfile`): extract zip/tar/tgz/tbz/txz/gz/bz2/xz → folder. Reject absolute path dan path-traversal entries. Tar extract pakai `filter='data'`.
+- Archive engine Python-pure (stdlib `zipfile` + `tarfile`): extract zip/tar/tgz/tbz/txz/gz/bz2/xz → folder (reject absolute path dan path-traversal entries; tar extract pakai `filter='data'`). Plus compress folder → zip/tar/tgz/tbz/txz (ZIP_DEFLATED / tar mode w/w:gz/w:bz2/w:xz, file-only entries via Path.rglob, POSIX relative arcnames).
 - QR engine: `qrencode` (generate txt → png/svg dengan size/margin/ECC L-M-Q-H) + `zbarimg` (decode image → txt, exit 4 = no barcode). Engine declare `requires_binary="qrencode"` + `extra_binaries=("zbarimg",)`.
 - Settings dataclass + JSON persistence di `~/.config/trex-converter/settings.json`; di-consume runner (max_concurrency) dan conversion_page (output_dir).
-- ImageMagick engine nyata dengan opsi lengkap: transform (rotate, flip, flop, auto-trim, free crop, aspect crop), resize modes (dimension, longest edge, percent, megapixel), color (grayscale, sepia, negate, normalize, brightness, contrast, gamma), filter (blur, sharpen, denoise, vignette), border/frame, watermark teks dengan gravity dan opacity, density, dan ICO multi-resolution auto-resize.
-- PDF engine nyata via PyMuPDF + qpdf: render halaman PDF ke PNG/JPG, ekstrak ke TXT/HTML, plus operasi PDF→PDF (extract pages, reorder, rotate, compress, repair via qpdf, encrypt/decrypt AES-256, strip metadata, edit metadata, watermark teks/gambar gravity 9-arah, page numbering/Bates dengan template `{n}`/`{total}`/`{page}` + skip-first-N + opacity), dan operasi pdf→folder (split, extract_images dengan dedupe by xref, extract_attachments via `embfile_*`).
+- ImageMagick engine nyata dengan opsi lengkap: transform (rotate, flip, flop, auto-trim, free crop, aspect crop), resize modes (dimension, longest edge, percent, megapixel), fit-to-canvas dengan letterbox (`-resize WxH -background COLOR -gravity center -extent WxH`), color (grayscale, sepia, negate, normalize, brightness, contrast, gamma), filter (blur, sharpen, denoise, vignette), border/frame, watermark teks/gambar dengan gravity dan opacity, density, dan ICO multi-resolution auto-resize.
+- PDF engine nyata via PyMuPDF + qpdf: render halaman PDF ke PNG/JPG, ekstrak ke TXT/HTML, plus operasi PDF→PDF (extract pages, reorder, rotate, compress, repair via qpdf, encrypt/decrypt AES-256, strip metadata, edit metadata, watermark teks/gambar gravity 9-arah, page numbering/Bates dengan template `{n}`/`{total}`/`{page}` + skip-first-N + opacity, redact via `Page.search_for(term)` + `add_redact_annot` + `apply_redactions`), dan operasi pdf→folder (split, extract_images dengan dedupe by xref, extract_attachments via `embfile_*`).
 - UI PySide6 dengan sidebar.
 - Icon pack `qtawesome`.
 - App logo SVG and hicolor PNG icon assets.
@@ -62,6 +62,7 @@ Sidebar menu:
 - Image Montage
 - Subtitle Merge
 - Archive
+- Archive Compress
 - QR / Barcode
 - Settings
 - About
@@ -126,7 +127,7 @@ Icon sudah dipakai di:
 - `app/ui/theme.py`: brand colors.
 - `app/ui/icons.py`: icon helper.
 - `app/ui/main_window.py`: sidebar layout, global stylesheet.
-- `app/ui/conversion_page.py`: reusable page per category, mendukung `extra_options_factory` untuk inject panel opsi khusus, `directory_output` untuk output folder, `multi_input` untuk list widget + Add/Remove/Clear input file, dan `default_options` untuk force-inject option.
+- `app/ui/conversion_page.py`: reusable page per category, mendukung `extra_options_factory` untuk inject panel opsi khusus, `directory_output` untuk output folder, `directory_input` untuk input folder picker (format_in derive dari config), `multi_input` untuk list widget + Add/Remove/Clear input file, dan `default_options` untuk force-inject option.
 - `app/ui/image_options.py`: panel tabbed lengkap untuk opsi ImageMagick lanjutan.
 - `app/ui/queue_panel.py`: global queue table.
 - `app/core/task.py`: task dataclass and status.
@@ -141,7 +142,7 @@ Icon sudah dipakai di:
 - `app/ui/settings_page.py`: Settings page dengan form output folder / concurrency / quality / DPI.
 - `app/core/settings.py`: Settings dataclass + JSON persistence + module-level cache.
 - `app/engines/subtitle_engine.py`: Python parser untuk SRT/VTT/ASS, plus multi-input merge (`_collect_merged_cues`) dengan mode shift (cumulative offset + gap) atau append (sort by start), terima campuran format input.
-- `app/engines/archive_engine.py`: stdlib zip/tar extractor dengan path-safety guard.
+- `app/engines/archive_engine.py`: stdlib zip/tar extractor dengan path-safety guard, plus folder→archive compressor (zip via ZIP_DEFLATED, tar via mode w/w:gz/w:bz2/w:xz).
 - `app/engines/qr_engine.py`: qrencode (generate) + zbarimg (decode) wrapper.
 - `app/ui/qr_options.py`: panel single-pane untuk QR options (size/margin/ECC).
 - `app/ui/multi_input_options.py`: panels untuk `Audio Mix` (duration + normalize), `Image Montage` (tile + geometry + background), `Subtitle Merge` (mode + gap), `PDF Numbering` (format/position/size/start/skip), dan `Slides to Images` (image format + DPI).
@@ -180,7 +181,7 @@ cd /home/sarta/Project/trex-converter
 Current expected result:
 
 ```text
-254 passed
+270 passed
 ```
 
 ## System Dependencies
@@ -218,10 +219,8 @@ Development dependencies:
 ## Next Likely Work
 
 Roadmap lengkap dengan checklist `[x]/[~]/[ ]` ada di `next-development.md`. Highlight item terbesar yang masih `[ ]`:
-- PDF Tools: PDF→DOCX/EPUB, redaction, A/B compare, split-by-file-size, image-downsample compress, qpdf linearize. (Merge, split-by-range/N, watermark image, page numbering, extract_images, extract_attachments sudah selesai.)
+- PDF Tools: PDF→DOCX/EPUB, A/B compare, split-by-file-size, image-downsample compress, qpdf linearize. (Merge, split-by-range/N, watermark image, page numbering, extract_images, extract_attachments, redaction sudah selesai.)
 - Video: stream-copy trim, two-pass target-size compress, subtitle extract dari MKV, hardware accel detect.
-- Document: password-protected PDF export.
-- Archive: compress folder → archive (extract sudah selesai).
 - Modul baru §7: Ebook (Pandoc/Calibre), Metadata cross-cut (exiftool).
 - Cross-cutting §8: preview/details panel per task, batch drag-and-drop multi-file, preset save/load per modul, packaging `.deb` final.
 

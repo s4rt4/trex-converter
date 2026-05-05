@@ -154,6 +154,136 @@ async def test_extract_tar_xz_via_xz_format_alias(tmp_path) -> None:
     assert (target / "deep" / "file.txt").read_bytes() == b"deep"
 
 
+# ---- Compress folder -> archive ----
+
+
+def _build_source_tree(root: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "readme.txt").write_text("hello", encoding="utf-8")
+    (root / "src").mkdir()
+    (root / "src" / "main.py").write_text("print('hi')\n", encoding="utf-8")
+    (root / "src" / "deep").mkdir()
+    (root / "src" / "deep" / "data.bin").write_bytes(b"\x00\x01\x02")
+
+
+def test_supports_folder_to_archive_pairs() -> None:
+    engine = ArchiveEngine()
+
+    for fmt_out in ("zip", "tar", "tgz", "tbz", "txz"):
+        assert engine.supports("folder", fmt_out), f"folder -> {fmt_out}"
+    assert not engine.supports("folder", "gz")  # gz alias is extract-only
+
+
+@pytest.mark.asyncio
+async def test_compress_folder_to_zip(tmp_path) -> None:
+    src = tmp_path / "tree"
+    _build_source_tree(src)
+    archive = tmp_path / "out.zip"
+
+    task = Task(
+        input_path=src,
+        output_path=archive,
+        format_in="folder",
+        format_out="zip",
+        engine="archive",
+    )
+    await ArchiveEngine().convert(task)
+
+    assert archive.exists()
+    with zipfile.ZipFile(archive, "r") as zf:
+        names = sorted(zf.namelist())
+    assert names == sorted(
+        ["readme.txt", "src/main.py", "src/deep/data.bin"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_compress_folder_to_tgz(tmp_path) -> None:
+    src = tmp_path / "tree"
+    _build_source_tree(src)
+    archive = tmp_path / "out.tgz"
+
+    task = Task(
+        input_path=src,
+        output_path=archive,
+        format_in="folder",
+        format_out="tgz",
+        engine="archive",
+    )
+    await ArchiveEngine().convert(task)
+
+    assert archive.exists()
+    with tarfile.open(archive, "r:gz") as tf:
+        names = sorted(tf.getnames())
+    assert names == sorted(
+        ["readme.txt", "src/main.py", "src/deep/data.bin"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_compress_round_trip_via_extract(tmp_path) -> None:
+    src = tmp_path / "tree"
+    _build_source_tree(src)
+    archive = tmp_path / "out.zip"
+
+    await ArchiveEngine().convert(
+        Task(
+            input_path=src,
+            output_path=archive,
+            format_in="folder",
+            format_out="zip",
+            engine="archive",
+        )
+    )
+
+    extract_dir = tmp_path / "back"
+    await ArchiveEngine().convert(
+        Task(
+            input_path=archive,
+            output_path=extract_dir,
+            format_in="zip",
+            format_out="folder",
+            engine="archive",
+        )
+    )
+
+    assert (extract_dir / "readme.txt").read_text(encoding="utf-8") == "hello"
+    assert (extract_dir / "src" / "main.py").read_text(encoding="utf-8") == "print('hi')\n"
+    assert (extract_dir / "src" / "deep" / "data.bin").read_bytes() == b"\x00\x01\x02"
+
+
+@pytest.mark.asyncio
+async def test_compress_rejects_empty_folder(tmp_path) -> None:
+    src = tmp_path / "empty"
+    src.mkdir()
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.zip",
+        format_in="folder",
+        format_out="zip",
+        engine="archive",
+    )
+    with pytest.raises(RuntimeError, match="empty"):
+        await ArchiveEngine().convert(task)
+
+
+@pytest.mark.asyncio
+async def test_compress_rejects_file_input(tmp_path) -> None:
+    src = tmp_path / "not-a-folder.txt"
+    src.write_text("hi", encoding="utf-8")
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.zip",
+        format_in="folder",
+        format_out="zip",
+        engine="archive",
+    )
+    with pytest.raises(RuntimeError, match="folder"):
+        await ArchiveEngine().convert(task)
+
+
 @pytest.mark.asyncio
 async def test_unsupported_format_raises(tmp_path) -> None:
     archive = tmp_path / "f.zip"
