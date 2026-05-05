@@ -10,11 +10,12 @@ try:
         QLabel,
         QLineEdit,
         QListView,
+        QSpinBox,
         QVBoxLayout,
         QWidget,
     )
 except ImportError:  # pragma: no cover
-    QAbstractSpinBox = QCheckBox = QComboBox = QDoubleSpinBox = QGridLayout = QLabel = QLineEdit = QListView = QVBoxLayout = QWidget = None
+    QAbstractSpinBox = QCheckBox = QComboBox = QDoubleSpinBox = QGridLayout = QLabel = QLineEdit = QListView = QSpinBox = QVBoxLayout = QWidget = None
 
 
 MIX_DURATIONS = (
@@ -189,6 +190,147 @@ SPLIT_MODES = (
     ("Every N pages", "every_n"),
     ("Custom ranges", "range"),
 )
+PAGE_NUMBER_GRAVITIES = (
+    ("Bottom (south)", "south"),
+    ("Bottom-Right", "southeast"),
+    ("Bottom-Left", "southwest"),
+    ("Top (north)", "north"),
+    ("Top-Right", "northeast"),
+    ("Top-Left", "northwest"),
+)
+SLIDES_FORMATS = (
+    ("PNG", "png"),
+    ("JPG", "jpg"),
+)
+
+
+class PDFNumberingOptionsPanel(QWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("PDFNumberingOptionsPanel")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(10)
+        grid.setColumnMinimumWidth(0, 130)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+
+        self.format_input = QLineEdit(self)
+        self.format_input.setText("Page {n} of {total}")
+        self.format_input.setPlaceholderText("Page {n} of {total}")
+
+        self.position_combo = _combo(self, PAGE_NUMBER_GRAVITIES)
+
+        self.size_input = QSpinBox(self)
+        self.size_input.setRange(6, 72)
+        self.size_input.setValue(14)
+        self.size_input.setSuffix(" pt")
+        _use_stepper(self.size_input)
+
+        self.start_input = QSpinBox(self)
+        self.start_input.setRange(0, 100000)
+        self.start_input.setValue(1)
+        _use_stepper(self.start_input)
+
+        self.skip_input = QSpinBox(self)
+        self.skip_input.setRange(0, 100000)
+        self.skip_input.setValue(0)
+        _use_stepper(self.skip_input)
+
+        info = QLabel(
+            "Format placeholders: `{n}` is the printed number, `{total}` is the "
+            "page count after skipped pages. For Bates numbering use a fixed-width "
+            "format like `BATES{n:06}`. Skip leaves the first N pages untouched.",
+            self,
+        )
+        info.setWordWrap(True)
+
+        grid.addWidget(_field("Format", self), 0, 0)
+        grid.addWidget(self.format_input, 0, 1, 1, 3)
+        grid.addWidget(_field("Position", self), 1, 0)
+        grid.addWidget(self.position_combo, 1, 1)
+        grid.addWidget(_field("Size", self), 1, 2)
+        grid.addWidget(self.size_input, 1, 3)
+        grid.addWidget(_field("Start at", self), 2, 0)
+        grid.addWidget(self.start_input, 2, 1)
+        grid.addWidget(_field("Skip first", self), 2, 2)
+        grid.addWidget(self.skip_input, 2, 3)
+
+        layout.addLayout(grid)
+        layout.addWidget(info)
+        layout.addStretch(1)
+
+    def collect_options(self) -> dict:
+        options: dict[str, object] = {"operation": "page_numbering"}
+        text = self.format_input.text().strip()
+        if text:
+            options["page_number_format"] = text
+        position = self.position_combo.currentData()
+        if position and position != "south":
+            options["page_number_position"] = position
+        size = self.size_input.value()
+        if size != 14:
+            options["page_number_size"] = size
+        start = self.start_input.value()
+        if start != 1:
+            options["page_number_start"] = start
+        skip = self.skip_input.value()
+        if skip > 0:
+            options["page_number_skip"] = skip
+        return options
+
+
+class SlidesToImagesOptionsPanel(QWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("SlidesToImagesOptionsPanel")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(10)
+        grid.setColumnMinimumWidth(0, 130)
+        grid.setColumnStretch(1, 1)
+
+        self.format_combo = _combo(self, SLIDES_FORMATS)
+
+        self.dpi_input = QSpinBox(self)
+        self.dpi_input.setRange(72, 600)
+        self.dpi_input.setValue(200)
+        self.dpi_input.setSuffix(" DPI")
+        _use_stepper(self.dpi_input)
+
+        info = QLabel(
+            "LibreOffice converts the deck to PDF first, then PyMuPDF renders each "
+            "page at the chosen DPI. Higher DPI = sharper but larger files.",
+            self,
+        )
+        info.setWordWrap(True)
+
+        grid.addWidget(_field("Image format", self), 0, 0)
+        grid.addWidget(self.format_combo, 0, 1)
+        grid.addWidget(_field("Render DPI", self), 1, 0)
+        grid.addWidget(self.dpi_input, 1, 1)
+
+        layout.addLayout(grid)
+        layout.addWidget(info)
+        layout.addStretch(1)
+
+    def collect_options(self) -> dict:
+        options: dict[str, object] = {"operation": "slides_to_images"}
+        image_format = self.format_combo.currentData() or "png"
+        if image_format != "png":
+            options["slides_image_format"] = image_format
+        dpi = self.dpi_input.value()
+        if dpi != 200:
+            options["slides_dpi"] = dpi
+        return options
 
 
 class PDFSplitOptionsPanel(QWidget):

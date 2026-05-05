@@ -438,6 +438,14 @@ class ConversionPage(QWidget):
             return output == "pdf"
         if self.config.kind == "pdf-split":
             return output == "folder"
+        if self.config.kind == "pdf-numbering":
+            return output == "pdf"
+        if self.config.kind == "pdf-extract-images":
+            return output == "folder"
+        if self.config.kind == "pdf-extract-attachments":
+            return output == "folder"
+        if self.config.kind == "slides-to-images":
+            return output == "folder"
         if self.config.kind == "document-merge":
             return output == "pdf"
         if self.config.kind == "video-concat":

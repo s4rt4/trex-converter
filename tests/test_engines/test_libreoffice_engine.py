@@ -242,3 +242,125 @@ async def test_bulk_merge_requires_at_least_two_inputs(tmp_path) -> None:
 
     with pytest.raises(RuntimeError, match="at least two"):
         await LibreOfficeEngine().convert(task)
+
+
+# ---- PDF/A archival flag ----
+
+
+@pytest.mark.asyncio
+async def test_pdf_a_option_routes_through_writer_pdf_filter(tmp_path, monkeypatch) -> None:
+    fake_libreoffice = tmp_path / "libreoffice"
+    fake_libreoffice.write_text(
+        "#!/bin/sh\n"
+        "echo \"$@\" > \"$0.args\"\n"
+        "while [ \"$#\" -gt 0 ]; do\n"
+        "  case \"$1\" in\n"
+        "    --outdir) shift; outdir=\"$1\";;\n"
+        "    --convert-to) shift; ;;\n"
+        "    *) input=\"$1\" ;;\n"
+        "  esac\n"
+        "  shift\n"
+        "done\n"
+        "base=$(basename \"$input\")\n"
+        "stem=${base%.*}\n"
+        "printf 'pdf-a-data' > \"$outdir/$stem.pdf\"\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_libreoffice.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    src = tmp_path / "report.docx"
+    src.write_text("doc", encoding="utf-8")
+    out = tmp_path / "out.pdf"
+
+    task = Task(
+        input_path=src,
+        output_path=out,
+        format_in="docx",
+        format_out="pdf",
+        engine="libreoffice",
+        options={"pdf_a": True},
+    )
+
+    await LibreOfficeEngine().convert(task)
+
+    assert out.read_bytes() == b"pdf-a-data"
+    args = (tmp_path / "libreoffice.args").read_text(encoding="utf-8")
+    assert 'pdf:writer_pdf_Export:' in args
+    assert 'SelectPdfVersion' in args
+
+
+# ---- Slides to images ----
+
+
+@pytest.mark.asyncio
+async def test_slides_to_images_renders_each_page_to_png(tmp_path, monkeypatch) -> None:
+    fitz = pytest.importorskip("fitz")
+    template = tmp_path / "_template.pdf"
+    _make_template_pdf(template, fitz, page_count=3)
+    _install_fake_libreoffice(tmp_path, monkeypatch, template)
+
+    src = tmp_path / "deck.pptx"
+    src.write_text("ppt", encoding="utf-8")
+    out_dir = tmp_path / "slides"
+
+    task = Task(
+        input_path=src,
+        output_path=out_dir,
+        format_in="pptx",
+        format_out="folder",
+        engine="libreoffice",
+        options={"operation": "slides_to_images"},
+    )
+
+    await LibreOfficeEngine().convert(task)
+
+    files = sorted(out_dir.glob("*.png"))
+    assert [f.name for f in files] == ["deck-001.png", "deck-002.png", "deck-003.png"]
+    # Each file should be a real PNG (PyMuPDF Pixmap.save produces a non-empty file)
+    for f in files:
+        assert f.stat().st_size > 0
+
+
+@pytest.mark.asyncio
+async def test_slides_to_images_supports_jpg_format(tmp_path, monkeypatch) -> None:
+    fitz = pytest.importorskip("fitz")
+    template = tmp_path / "_template.pdf"
+    _make_template_pdf(template, fitz, page_count=2)
+    _install_fake_libreoffice(tmp_path, monkeypatch, template)
+
+    src = tmp_path / "deck.pptx"
+    src.write_text("ppt", encoding="utf-8")
+    out_dir = tmp_path / "slides"
+
+    task = Task(
+        input_path=src,
+        output_path=out_dir,
+        format_in="pptx",
+        format_out="folder",
+        engine="libreoffice",
+        options={"operation": "slides_to_images", "slides_image_format": "jpg"},
+    )
+
+    await LibreOfficeEngine().convert(task)
+
+    files = sorted(out_dir.glob("*.jpg"))
+    assert [f.name for f in files] == ["deck-001.jpg", "deck-002.jpg"]
+
+
+@pytest.mark.asyncio
+async def test_slides_to_images_invalid_format_raises(tmp_path) -> None:
+    src = tmp_path / "deck.pptx"
+    src.write_text("ppt", encoding="utf-8")
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "slides",
+        format_in="pptx",
+        format_out="folder",
+        engine="libreoffice",
+        options={"operation": "slides_to_images", "slides_image_format": "tiff"},
+    )
+
+    with pytest.raises(RuntimeError, match="slides_image_format"):
+        await LibreOfficeEngine().convert(task)

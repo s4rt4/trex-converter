@@ -32,8 +32,10 @@ PDF_OPERATIONS = {
     "edit_metadata",
     "watermark_text",
     "watermark_image",
+    "page_numbering",
     "merge",
 }
+PDF_FOLDER_OPERATIONS = {"split", "extract_images", "extract_attachments"}
 GRAVITY_TO_FRACTION = {
     "northwest": (0.05, 0.08),
     "north": (0.5, 0.08),
@@ -62,7 +64,18 @@ class PDFEngine(BaseEngine):
         output_path = Path(task.output_path)
 
         if format_out == PDF_FOLDER_OUTPUT:
-            await self._run_split(task, output_path)
+            operation = str(task.options.get("operation") or "split").lower()
+            if operation == "split":
+                await self._run_split(task, output_path)
+            elif operation == "extract_images":
+                await self._run_extract_images(task, output_path)
+            elif operation == "extract_attachments":
+                await self._run_extract_attachments(task, output_path)
+            else:
+                raise RuntimeError(
+                    f"Unsupported folder operation: {operation} "
+                    f"(expected one of: {sorted(PDF_FOLDER_OPERATIONS)})"
+                )
             return
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -160,6 +173,73 @@ class PDFEngine(BaseEngine):
             _close(document)
 
         task.append_log(f"Split into {len(chunks)} file(s) under {output_dir}")
+        task.progress = 1.0
+
+    async def _run_extract_images(self, task: Task, output_dir: Path) -> None:
+        fitz = _load_fitz()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        document = fitz.open(str(task.input_path))
+        try:
+            page_count = len(document)
+            stem = Path(task.input_path).stem
+            extracted = 0
+            seen_xrefs: set[int] = set()
+            dedupe = bool(task.options.get("extract_dedupe", True))
+            for page_index in range(page_count):
+                page = document.load_page(page_index)
+                images = page.get_images(full=True)
+                for slot, info in enumerate(images, start=1):
+                    xref = info[0]
+                    if dedupe and xref in seen_xrefs:
+                        continue
+                    seen_xrefs.add(xref)
+                    image = document.extract_image(xref)
+                    if not image or not image.get("image"):
+                        continue
+                    ext = image.get("ext") or "png"
+                    extracted += 1
+                    out_name = f"{stem}-page{page_index + 1:03d}-img{slot:02d}.{ext}"
+                    (output_dir / out_name).write_bytes(image["image"])
+                task.progress = 0.05 + 0.85 * ((page_index + 1) / max(page_count, 1))
+                await asyncio.sleep(0)
+
+            if extracted == 0:
+                task.append_log("No embedded images found")
+        finally:
+            _close(document)
+
+        task.append_log(f"Extracted {extracted} image(s) to {output_dir}")
+        task.progress = 1.0
+
+    async def _run_extract_attachments(self, task: Task, output_dir: Path) -> None:
+        fitz = _load_fitz()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        document = fitz.open(str(task.input_path))
+        try:
+            count = document.embfile_count() if hasattr(document, "embfile_count") else 0
+            if count == 0:
+                task.append_log("No embedded attachments found")
+                task.progress = 1.0
+                return
+
+            for index in range(count):
+                info = document.embfile_info(index)
+                name = info.get("filename") or info.get("name") or f"attachment-{index + 1:03d}"
+                payload = document.embfile_get(index)
+                if payload is None:
+                    continue
+                safe_name = _safe_attachment_name(name)
+                target = output_dir / safe_name
+                if target.exists():
+                    target = output_dir / f"{index + 1:03d}-{safe_name}"
+                target.write_bytes(payload)
+                task.append_log(f"Extracted attachment: {target.name} ({len(payload)} bytes)")
+                task.progress = 0.05 + 0.85 * ((index + 1) / max(count, 1))
+                await asyncio.sleep(0)
+        finally:
+            _close(document)
+
+        task.append_log(f"Wrote {count} attachment(s) to {output_dir}")
         task.progress = 1.0
 
     async def _run_merge(self, task: Task, output_path: Path) -> None:
@@ -293,6 +373,7 @@ class PDFEngine(BaseEngine):
                 "edit_metadata": _op_edit_metadata,
                 "watermark_text": _op_watermark_text,
                 "watermark_image": _op_watermark_image,
+                "page_numbering": _op_page_numbering,
             }[operation]
 
             handler(document, fitz, task, page_count)
@@ -442,6 +523,59 @@ def _op_watermark_image(document, fitz: ModuleType, task: Task, page_count: int)
         f"Watermarked {page_count} page(s) with image {image_path.name} "
         f"(width {width_fraction:.0%}, opacity {opacity}%, gravity {gravity})"
     )
+
+
+def _op_page_numbering(document, fitz: ModuleType, task: Task, page_count: int) -> None:
+    template = str(task.options.get("page_number_format") or "Page {n} of {total}")
+    gravity = str(task.options.get("page_number_position") or "south").lower()
+    fraction = GRAVITY_TO_FRACTION.get(gravity, GRAVITY_TO_FRACTION["south"])
+    fontsize = _int_option(task.options.get("page_number_size")) or 14
+    start = _int_option(task.options.get("page_number_start")) or 1
+    skip = _int_option(task.options.get("page_number_skip")) or 0
+    color = (0, 0, 0)
+    opacity = _int_option(task.options.get("page_number_opacity"))
+    if opacity is None:
+        opacity = 100
+    fill_opacity = max(0.0, min(1.0, opacity / 100.0))
+
+    numbered = 0
+    total = max(0, page_count - skip)
+    for index in range(skip, page_count):
+        page = document.load_page(index)
+        n = start + (index - skip)
+        try:
+            label = template.format(n=n, total=total, page=n)
+        except (KeyError, IndexError):
+            label = f"{n}"
+        rect = page.rect
+        x = rect.x0 + rect.width * fraction[0]
+        y = rect.y0 + rect.height * fraction[1]
+        # Crude horizontal centering for the standard gravities by shifting back
+        # half the approximate text width (avg glyph width ~ fontsize * 0.5).
+        approx_text_width = len(label) * fontsize * 0.5
+        if gravity in {"north", "center", "south"}:
+            x -= approx_text_width / 2
+        elif gravity in {"northeast", "east", "southeast"}:
+            x -= approx_text_width
+        page.insert_text(
+            (x, y),
+            label,
+            fontsize=fontsize,
+            color=color,
+            fill_opacity=fill_opacity,
+        )
+        numbered += 1
+
+    task.append_log(
+        f"Numbered {numbered} page(s) with format '{template}' "
+        f"(start={start}, skip={skip}, gravity={gravity})"
+    )
+
+
+def _safe_attachment_name(name: str) -> str:
+    text = str(name).strip().replace("/", "_").replace("\\", "_")
+    text = text.lstrip(".")
+    return text or "attachment"
 
 
 def _save_kwargs_for(operation: str, fitz: ModuleType, task: Task) -> dict:

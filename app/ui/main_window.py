@@ -13,11 +13,14 @@ from app.ui.about_page import AboutPage
 from app.ui.conversion_page import ConversionPage, ConversionPageConfig
 from app.ui.dashboard_page import DashboardPage
 from app.ui.audio_options import AudioOptionsPanel
+from app.ui.document_options import DocumentOptionsPanel
 from app.ui.image_options import ImageOptionsPanel
 from app.ui.multi_input_options import (
     AudioMixOptionsPanel,
     ImageMontageOptionsPanel,
+    PDFNumberingOptionsPanel,
     PDFSplitOptionsPanel,
+    SlidesToImagesOptionsPanel,
     SubtitleMergeOptionsPanel,
 )
 from app.ui.ocr_options import OCROptionsPanel
@@ -97,6 +100,7 @@ PAGE_CONFIGS = (
         default_output="pdf",
         engine_name="libreoffice",
         kind="document",
+        extra_options_factory=DocumentOptionsPanel,
     ),
     ConversionPageConfig(
         title="Subtitle",
@@ -143,6 +147,45 @@ PAGE_CONFIGS = (
         force_engine=True,
         directory_output=True,
         extra_options_factory=PDFSplitOptionsPanel,
+    ),
+    ConversionPageConfig(
+        title="PDF Numbering",
+        input_formats=("pdf",),
+        default_output="pdf",
+        engine_name="pdf",
+        kind="pdf-numbering",
+        force_engine=True,
+        extra_options_factory=PDFNumberingOptionsPanel,
+    ),
+    ConversionPageConfig(
+        title="PDF Extract Images",
+        input_formats=("pdf",),
+        default_output="folder",
+        engine_name="pdf",
+        kind="pdf-extract-images",
+        force_engine=True,
+        directory_output=True,
+        default_options=(("operation", "extract_images"),),
+    ),
+    ConversionPageConfig(
+        title="PDF Extract Attachments",
+        input_formats=("pdf",),
+        default_output="folder",
+        engine_name="pdf",
+        kind="pdf-extract-attachments",
+        force_engine=True,
+        directory_output=True,
+        default_options=(("operation", "extract_attachments"),),
+    ),
+    ConversionPageConfig(
+        title="Slides to Images",
+        input_formats=("pptx", "ppt", "odp"),
+        default_output="folder",
+        engine_name="libreoffice",
+        kind="slides-to-images",
+        force_engine=True,
+        directory_output=True,
+        extra_options_factory=SlidesToImagesOptionsPanel,
     ),
     ConversionPageConfig(
         title="Document Merge",
@@ -421,6 +464,30 @@ class MainWindow(QMainWindow):
             #SidebarNav::item:hover {
                 background: rgba(239, 227, 202, 24);
             }
+            #SidebarNav QScrollBar:vertical {
+                background: transparent;
+                width: 6px;
+                margin: 4px 2px;
+                border: 0;
+            }
+            #SidebarNav QScrollBar::handle:vertical {
+                background: rgba(86, 182, 198, 64);
+                border-radius: 3px;
+                min-height: 24px;
+            }
+            #SidebarNav QScrollBar::handle:vertical:hover {
+                background: rgba(86, 182, 198, 140);
+            }
+            #SidebarNav QScrollBar::add-line:vertical,
+            #SidebarNav QScrollBar::sub-line:vertical {
+                background: transparent;
+                height: 0;
+                border: 0;
+            }
+            #SidebarNav QScrollBar::add-page:vertical,
+            #SidebarNav QScrollBar::sub-page:vertical {
+                background: transparent;
+            }
             #Sidebar QPushButton {
                 background: rgba(36, 21, 143, 128);
                 color: $BRAND_ACCENT;
@@ -545,7 +612,15 @@ class MainWindow(QMainWindow):
                 border: 0;
             }
             #OCROptionsPanel,
-            #SubtitleOptionsPanel {
+            #SubtitleOptionsPanel,
+            #AudioMixOptionsPanel,
+            #ImageMontageOptionsPanel,
+            #SubtitleMergeOptionsPanel,
+            #PDFSplitOptionsPanel,
+            #PDFNumberingOptionsPanel,
+            #SlidesToImagesOptionsPanel,
+            #DocumentOptionsPanel,
+            #QROptionsPanel {
                 background: $BRAND_SURFACE_SOFT;
                 border: 1px solid rgba(86, 182, 198, 145);
                 border-radius: 8px;
@@ -599,7 +674,23 @@ class MainWindow(QMainWindow):
             #OCROptionsPanel,
             #OCROptionsPanel QWidget,
             #SubtitleOptionsPanel,
-            #SubtitleOptionsPanel QWidget {
+            #SubtitleOptionsPanel QWidget,
+            #AudioMixOptionsPanel,
+            #AudioMixOptionsPanel QWidget,
+            #ImageMontageOptionsPanel,
+            #ImageMontageOptionsPanel QWidget,
+            #SubtitleMergeOptionsPanel,
+            #SubtitleMergeOptionsPanel QWidget,
+            #PDFSplitOptionsPanel,
+            #PDFSplitOptionsPanel QWidget,
+            #PDFNumberingOptionsPanel,
+            #PDFNumberingOptionsPanel QWidget,
+            #SlidesToImagesOptionsPanel,
+            #SlidesToImagesOptionsPanel QWidget,
+            #DocumentOptionsPanel,
+            #DocumentOptionsPanel QWidget,
+            #QROptionsPanel,
+            #QROptionsPanel QWidget {
                 background: $BRAND_SURFACE_SOFT;
             }
             #ImageOptionsPanel QSlider::groove:horizontal,
@@ -836,6 +927,10 @@ def _page_icon(kind: str):
         "pdf": "fa5s.file-pdf",
         "pdf-merge": "fa5s.copy",
         "pdf-split": "fa5s.cut",
+        "pdf-numbering": "fa5s.list-ol",
+        "pdf-extract-images": "fa5s.images",
+        "pdf-extract-attachments": "fa5s.paperclip",
+        "slides-to-images": "fa5s.images",
         "document-merge": "fa5s.file-medical",
         "video-concat": "fa5s.film",
         "audio-mix": "fa5s.compact-disc",

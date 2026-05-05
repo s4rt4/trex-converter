@@ -925,3 +925,253 @@ async def test_watermark_image_path_must_exist(tmp_path) -> None:
 
     with pytest.raises(RuntimeError, match="not found"):
         await PDFEngine().convert(task)
+
+
+# ---- Page numbering ----
+
+
+@pytest.mark.asyncio
+async def test_page_numbering_adds_text_to_each_page(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    for _ in range(4):
+        document.new_page(width=400, height=600)
+    document.save(str(src))
+    document.close()
+
+    out = tmp_path / "out.pdf"
+    task = Task(
+        input_path=src,
+        output_path=out,
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={
+            "operation": "page_numbering",
+            "page_number_format": "Page {n} of {total}",
+        },
+    )
+
+    await PDFEngine().convert(task)
+
+    result = fitz.open(str(out))
+    try:
+        assert "Page 1 of 4" in result.load_page(0).get_text()
+        assert "Page 4 of 4" in result.load_page(3).get_text()
+    finally:
+        result.close()
+
+
+@pytest.mark.asyncio
+async def test_page_numbering_supports_bates_format(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    for _ in range(2):
+        document.new_page(width=400, height=600)
+    document.save(str(src))
+    document.close()
+
+    out = tmp_path / "out.pdf"
+    task = Task(
+        input_path=src,
+        output_path=out,
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={
+            "operation": "page_numbering",
+            "page_number_format": "BATES{n:06}",
+            "page_number_start": 100,
+        },
+    )
+
+    await PDFEngine().convert(task)
+
+    result = fitz.open(str(out))
+    try:
+        assert "BATES000100" in result.load_page(0).get_text()
+        assert "BATES000101" in result.load_page(1).get_text()
+    finally:
+        result.close()
+
+
+@pytest.mark.asyncio
+async def test_page_numbering_skips_first_n_pages(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    for _ in range(3):
+        document.new_page(width=400, height=600)
+    document.save(str(src))
+    document.close()
+
+    out = tmp_path / "out.pdf"
+    task = Task(
+        input_path=src,
+        output_path=out,
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={
+            "operation": "page_numbering",
+            "page_number_format": "p{n}",
+            "page_number_skip": 1,
+        },
+    )
+
+    await PDFEngine().convert(task)
+
+    result = fitz.open(str(out))
+    try:
+        # Page 0 untouched
+        assert "p" not in result.load_page(0).get_text()
+        # Page 1 numbered as 1, page 2 as 2 (start defaults to 1, total = 2)
+        assert "p1" in result.load_page(1).get_text()
+        assert "p2" in result.load_page(2).get_text()
+    finally:
+        result.close()
+
+
+# ---- Extract images ----
+
+
+@pytest.mark.asyncio
+async def test_extract_images_writes_each_unique_image_to_folder(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    page = document.new_page(width=400, height=400)
+    # Embed a small PNG via insert_image
+    image_path = tmp_path / "embed.png"
+    pixmap = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 32, 32), 0)
+    pixmap.clear_with(255)
+    pixmap.save(str(image_path))
+    page.insert_image(fitz.Rect(50, 50, 200, 200), filename=str(image_path))
+    document.save(str(src))
+    document.close()
+
+    out_dir = tmp_path / "images"
+    task = Task(
+        input_path=src,
+        output_path=out_dir,
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"operation": "extract_images"},
+    )
+
+    await PDFEngine().convert(task)
+
+    assert out_dir.exists()
+    extracted = list(out_dir.iterdir())
+    assert len(extracted) >= 1
+    # Filename pattern <stem>-page<P>-img<I>.<ext>
+    assert any(
+        f.name.startswith("src-page001-img") for f in extracted
+    )
+
+
+@pytest.mark.asyncio
+async def test_extract_images_logs_when_no_images(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    document.new_page(width=200, height=200)
+    document.save(str(src))
+    document.close()
+
+    out_dir = tmp_path / "images"
+    task = Task(
+        input_path=src,
+        output_path=out_dir,
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"operation": "extract_images"},
+    )
+
+    await PDFEngine().convert(task)
+
+    assert out_dir.exists()
+    assert list(out_dir.iterdir()) == []
+    assert any("No embedded images" in line for line in task.log)
+
+
+# ---- Extract attachments ----
+
+
+@pytest.mark.asyncio
+async def test_extract_attachments_dumps_each_embedded_file(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    document.new_page(width=200, height=200)
+    document.embfile_add("notes.txt", b"hello attachment", filename="notes.txt")
+    document.embfile_add("data.bin", b"\x00\x01\x02\x03", filename="data.bin")
+    document.save(str(src))
+    document.close()
+
+    out_dir = tmp_path / "att"
+    task = Task(
+        input_path=src,
+        output_path=out_dir,
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"operation": "extract_attachments"},
+    )
+
+    await PDFEngine().convert(task)
+
+    assert (out_dir / "notes.txt").read_bytes() == b"hello attachment"
+    assert (out_dir / "data.bin").read_bytes() == b"\x00\x01\x02\x03"
+
+
+@pytest.mark.asyncio
+async def test_extract_attachments_with_no_embeds_logs_clean(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    document.new_page(width=200, height=200)
+    document.save(str(src))
+    document.close()
+
+    out_dir = tmp_path / "att"
+    task = Task(
+        input_path=src,
+        output_path=out_dir,
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"operation": "extract_attachments"},
+    )
+
+    await PDFEngine().convert(task)
+
+    assert out_dir.exists()
+    assert list(out_dir.iterdir()) == []
+    assert any("No embedded attachments" in line for line in task.log)
+
+
+@pytest.mark.asyncio
+async def test_unsupported_folder_operation_raises(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    document.new_page(width=200, height=200)
+    document.save(str(src))
+    document.close()
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out",
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"operation": "weirdo"},
+    )
+
+    with pytest.raises(RuntimeError, match="Unsupported folder operation"):
+        await PDFEngine().convert(task)
