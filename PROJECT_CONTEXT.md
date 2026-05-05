@@ -17,7 +17,7 @@ Prinsip utama:
 Versi project saat ini: `0.3.0`.
 
 Sudah ada:
-- Core task model dan task status lifecycle.
+- Core task model dan task status lifecycle, plus dukungan multi-input via `Task.extra_inputs` + property `inputs`/`formats_in` (DB punya kolom `extra_inputs` dengan auto-migration ALTER TABLE).
 - In-memory async `TaskQueue` dengan concurrency, cancel, retry, dan callback.
 - SQLite `TaskRepository` untuk history dan resume pending/running task.
 - `ConversionRegistry` untuk routing format ke engine.
@@ -50,6 +50,7 @@ Sidebar menu:
 - Subtitle
 - OCR
 - PDF Tools
+- PDF Merge
 - Archive
 - QR / Barcode
 - Settings
@@ -115,7 +116,7 @@ Icon sudah dipakai di:
 - `app/ui/theme.py`: brand colors.
 - `app/ui/icons.py`: icon helper.
 - `app/ui/main_window.py`: sidebar layout, global stylesheet.
-- `app/ui/conversion_page.py`: reusable page per category, mendukung `extra_options_factory` untuk inject panel opsi khusus.
+- `app/ui/conversion_page.py`: reusable page per category, mendukung `extra_options_factory` untuk inject panel opsi khusus, `directory_output` untuk output folder, `multi_input` untuk list widget + Add/Remove/Clear input file, dan `default_options` untuk force-inject option.
 - `app/ui/image_options.py`: panel tabbed lengkap untuk opsi ImageMagick lanjutan.
 - `app/ui/queue_panel.py`: global queue table.
 - `app/core/task.py`: task dataclass and status.
@@ -167,7 +168,7 @@ cd /home/sarta/Project/trex-converter
 Current expected result:
 
 ```text
-195 passed
+207 passed
 ```
 
 ## System Dependencies
@@ -205,7 +206,7 @@ Development dependencies:
 ## Next Likely Work
 
 Roadmap lengkap dengan checklist `[x]/[~]/[ ]` ada di `next-development.md`. Highlight item terbesar yang masih `[ ]`:
-- PDF Tools: merge, split, watermark gambar, page numbering/Bates, PDF→DOCX/EPUB, extract embedded images/attachments, redaction, A/B compare.
+- PDF Tools: split, watermark gambar, page numbering/Bates, PDF→DOCX/EPUB, extract embedded images/attachments, redaction, A/B compare. (Merge sudah selesai sebagai POC multi-input.)
 - Audio: merge/mix multi-track, cover art (ID3 APIC).
 - Video: stream-copy trim, two-pass target-size compress, subtitle extract dari MKV, hardware accel detect, concat multi-file.
 - Document: PPTX→PNG slides, PDF/A archival, password-protected PDF, bulk merge.
@@ -214,7 +215,7 @@ Roadmap lengkap dengan checklist `[x]/[~]/[ ]` ada di `next-development.md`. Hig
 - Modul baru §7: Ebook (Pandoc/Calibre), Metadata cross-cut (exiftool).
 - Cross-cutting §8: preview/details panel per task, batch drag-and-drop multi-file, preset save/load per modul, packaging `.deb` final.
 
-**Catatan arsitektur untuk fitur multi-input/multi-output**: PDF merge, video concat, audio mix, image montage, dan PDF split butuh refactor `Task` model dari single-input/single-output. Itu prasyarat besar yang belum dibuat.
+**Catatan arsitektur multi-input**: `Task` punya field `extra_inputs: list[Path]` plus property `inputs` (primary + extras) dan `formats_in` (suffix per input). DB `tasks.sqlite3` dapat kolom baru `extra_inputs TEXT` dengan auto-migration `ALTER TABLE` (deteksi via `PRAGMA table_info`). `ConversionPageConfig` dapat flag `multi_input: bool` (UI: list widget + Add/Remove/Clear + multi-select dialog) dan `default_options: tuple[tuple[str, object], ...]` (force-inject option). POC: PDF Merge page (multi_input=True, force_engine=True, default_options=operation:merge) → `PDFEngine._run_merge` iterate `Document.insert_pdf` untuk setiap source di `task.inputs`. Video concat / audio mix / image montage tinggal tambah engine path baca `task.inputs` + halaman multi_input=True. Multi-output masih ditangani via `directory_output` flag (pattern Archive).
 
 ## Codex Session Handoff
 

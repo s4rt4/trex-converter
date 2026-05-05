@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.core.registry import ConversionRegistry
@@ -22,6 +22,8 @@ try:
         QLabel,
         QLineEdit,
         QListView,
+        QListWidget,
+        QListWidgetItem,
         QMessageBox,
         QPushButton,
         QSlider,
@@ -32,7 +34,7 @@ try:
     )
 except ImportError:  # pragma: no cover
     Qt = None
-    QCheckBox = QComboBox = QFileDialog = QFrame = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QMessageBox = QPushButton = QSlider = QTabWidget = QToolButton = QVBoxLayout = QWidget = None
+    QCheckBox = QComboBox = QFileDialog = QFrame = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QListWidget = QListWidgetItem = QMessageBox = QPushButton = QSlider = QTabWidget = QToolButton = QVBoxLayout = QWidget = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +50,8 @@ class ConversionPageConfig:
     extra_options_factory: Callable[[QWidget], QWidget] | None = None
     force_engine: bool = False
     directory_output: bool = False
+    multi_input: bool = False
+    default_options: tuple[tuple[str, object], ...] = ()
 
 
 class ConversionPage(QWidget):
@@ -64,7 +68,9 @@ class ConversionPage(QWidget):
         self.config = config
         self.registry = registry
         self._on_enqueue = on_enqueue
-        self._input_path: Path | None = None
+        self._input_paths: list[Path] = []
+        self.input_display: QLineEdit | None = None
+        self.input_list: QListWidget | None = None
         self.quality_input: QSlider | None = None
         self.quality_value_label: QLabel | None = None
         self.resize_input: QLineEdit | None = None
@@ -99,20 +105,48 @@ class ConversionPage(QWidget):
         form.setColumnMinimumWidth(0, 80)
         form.setColumnStretch(1, 1)
 
-        input_row = QHBoxLayout()
-        input_row.setSpacing(10)
-        self.input_display = QLineEdit(form_shell)
-        self.input_display.setReadOnly(True)
-        browse_button = QPushButton("Browse", form_shell)
-        browse_button.setIcon(surface_icon("fa5s.folder-open"))
-        browse_button.setIconSize(ICON_SIZE)
-        browse_button.clicked.connect(self._choose_input)
-        input_row.addWidget(self.input_display, 1)
-        input_row.addWidget(browse_button)
         row = 0
-        form.addWidget(_field_label("Input", form_shell), row, 0)
-        form.addLayout(input_row, row, 1)
-        row += 1
+        if config.multi_input:
+            self.input_list = QListWidget(form_shell)
+            self.input_list.setObjectName("InputList")
+            self.input_list.setMinimumHeight(96)
+            input_buttons = QHBoxLayout()
+            input_buttons.setSpacing(8)
+            add_button = QPushButton("Add files", form_shell)
+            add_button.setIcon(surface_icon("fa5s.folder-open"))
+            add_button.setIconSize(ICON_SIZE)
+            add_button.clicked.connect(self._choose_input)
+            remove_button = QPushButton("Remove", form_shell)
+            remove_button.setIcon(surface_icon("fa5s.minus-circle"))
+            remove_button.setIconSize(ICON_SIZE)
+            remove_button.clicked.connect(self._remove_selected_inputs)
+            clear_button = QPushButton("Clear", form_shell)
+            clear_button.setIcon(surface_icon("fa5s.times-circle"))
+            clear_button.setIconSize(ICON_SIZE)
+            clear_button.clicked.connect(self._clear_inputs)
+            input_buttons.addStretch(1)
+            input_buttons.addWidget(add_button)
+            input_buttons.addWidget(remove_button)
+            input_buttons.addWidget(clear_button)
+            form.addWidget(_field_label("Inputs", form_shell), row, 0)
+            form.addWidget(self.input_list, row, 1)
+            row += 1
+            form.addLayout(input_buttons, row, 1)
+            row += 1
+        else:
+            input_row = QHBoxLayout()
+            input_row.setSpacing(10)
+            self.input_display = QLineEdit(form_shell)
+            self.input_display.setReadOnly(True)
+            browse_button = QPushButton("Browse", form_shell)
+            browse_button.setIcon(surface_icon("fa5s.folder-open"))
+            browse_button.setIconSize(ICON_SIZE)
+            browse_button.clicked.connect(self._choose_input)
+            input_row.addWidget(self.input_display, 1)
+            input_row.addWidget(browse_button)
+            form.addWidget(_field_label("Input", form_shell), row, 0)
+            form.addLayout(input_row, row, 1)
+            row += 1
 
         output_format_row = QHBoxLayout()
         output_format_row.setSpacing(8)
@@ -219,6 +253,34 @@ class ConversionPage(QWidget):
 
     def _choose_input(self) -> None:
         filters = " ".join(f"*.{fmt}" for fmt in self.config.input_formats)
+        if self.config.multi_input:
+            picked = _get_open_file_names(
+                self,
+                "Select input files",
+                f"{self.config.title} ({filters})",
+            )
+            if not picked:
+                return
+            for raw in picked:
+                path = Path(raw)
+                if path.suffix.lower().lstrip(".") not in self.config.input_formats:
+                    QMessageBox.warning(
+                        self,
+                        "Unsupported Format",
+                        f"{path.suffix} is not supported in {self.config.title}",
+                    )
+                    continue
+                if path in self._input_paths:
+                    continue
+                self._input_paths.append(path)
+                self.input_list.addItem(QListWidgetItem(str(path)))
+            if not self._input_paths:
+                return
+            primary = self._input_paths[0]
+            self._populate_outputs(primary)
+            self._update_output_path()
+            return
+
         input_name = _get_open_file_name(
             self,
             "Select input file",
@@ -230,17 +292,37 @@ class ConversionPage(QWidget):
         if input_path.suffix.lower().lstrip(".") not in self.config.input_formats:
             QMessageBox.warning(self, "Unsupported Format", f"{input_path.suffix} is not supported in {self.config.title}")
             return
-        self._input_path = input_path
+        self._input_paths = [input_path]
         self.input_display.setText(str(input_path))
         self._populate_outputs(input_path)
         self._update_output_path()
 
+    def _remove_selected_inputs(self) -> None:
+        if self.input_list is None:
+            return
+        for item in list(self.input_list.selectedItems()):
+            row = self.input_list.row(item)
+            self.input_list.takeItem(row)
+            if 0 <= row < len(self._input_paths):
+                self._input_paths.pop(row)
+        self._update_output_path()
+
+    def _clear_inputs(self) -> None:
+        if self.input_list is None:
+            return
+        self.input_list.clear()
+        self._input_paths = []
+
+    def _primary_input(self) -> Path | None:
+        return self._input_paths[0] if self._input_paths else None
+
     def _choose_output(self) -> None:
-        if not self._input_path:
+        primary = self._primary_input()
+        if not primary:
             QMessageBox.warning(self, "Input Required", "Choose an input file first.")
             return
         if self.config.directory_output:
-            current = self.output_display.text() or str(self._input_path.parent)
+            current = self.output_display.text() or str(primary.parent)
             picked = QFileDialog.getExistingDirectory(
                 self, "Select output folder", current
             )
@@ -268,23 +350,25 @@ class ConversionPage(QWidget):
         self.output_combo.addItems(outputs)
 
     def _update_output_path(self) -> None:
-        if not self._input_path or not self.output_combo.currentText():
+        primary = self._primary_input()
+        if not primary or not self.output_combo.currentText():
             return
         from app.core.settings import get_settings
 
         suffix = self.output_combo.currentText()
         output_dir = get_settings().output_dir.strip()
         if self.config.directory_output:
-            base = Path(output_dir) if output_dir else self._input_path.parent
-            target = base / self._input_path.stem
+            base = Path(output_dir) if output_dir else primary.parent
+            target = base / primary.stem
         elif output_dir:
-            target = Path(output_dir) / f"{self._input_path.stem}.{suffix}"
+            target = Path(output_dir) / f"{primary.stem}.{suffix}"
         else:
-            target = self._input_path.with_suffix(f".{suffix}")
+            target = primary.with_suffix(f".{suffix}")
         self.output_display.setText(str(target))
 
     def _enqueue(self) -> None:
-        if not self._input_path:
+        primary = self._primary_input()
+        if not primary:
             QMessageBox.warning(self, "Input Required", "Choose an input file first.")
             return
         format_out = self.output_combo.currentText()
@@ -295,20 +379,22 @@ class ConversionPage(QWidget):
         if self.config.force_engine:
             engine_name = self.config.engine_name
         else:
-            engine_name = self.registry.resolve(self._input_path.suffix, format_out).name
+            engine_name = self.registry.resolve(primary.suffix, format_out).name
+        extra_inputs = list(self._input_paths[1:])
         self._on_enqueue(
             Task(
-                input_path=self._input_path,
+                input_path=primary,
                 output_path=output_path,
-                format_in=self._input_path.suffix,
+                format_in=primary.suffix,
                 format_out=format_out,
                 engine=engine_name,
                 options=self._options(),
+                extra_inputs=extra_inputs,
             )
         )
 
     def _options(self) -> dict:
-        options: dict[str, object] = {}
+        options: dict[str, object] = dict(self.config.default_options)
         if self.config.show_quality and self.quality_input is not None:
             options["quality"] = self.quality_input.value()
         if self.config.show_resize and self.resize_input is not None and self.resize_input.text().strip():
@@ -348,6 +434,8 @@ class ConversionPage(QWidget):
             }
         if self.config.kind == "pdf":
             return output in {*IMAGE_FORMATS, "txt", "pdf", "html"}
+        if self.config.kind == "pdf-merge":
+            return output == "pdf"
         if self.config.kind == "ocr":
             return output in {"txt", "pdf", "hocr", "tsv"}
         if self.config.kind == "subtitle":
@@ -368,6 +456,16 @@ def _get_open_file_name(parent: QWidget, title: str, file_filter: str) -> str:
         return ""
     selected = dialog.selectedFiles()
     return selected[0] if selected else ""
+
+
+def _get_open_file_names(parent: QWidget, title: str, file_filter: str) -> list[str]:
+    dialog = QFileDialog(parent, title)
+    dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
+    dialog.setNameFilter(file_filter)
+    dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+    if dialog.exec() != QFileDialog.DialogCode.Accepted:
+        return []
+    return list(dialog.selectedFiles())
 
 
 def _field_label(text: str, parent: QWidget) -> QLabel:

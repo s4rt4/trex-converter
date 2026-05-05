@@ -29,6 +29,7 @@ class Task:
     error: str | None = None
     retries: int = 0
     max_retries: int = 2
+    extra_inputs: list[Path] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.input_path = Path(self.input_path)
@@ -36,6 +37,7 @@ class Task:
         self.format_in = self.format_in.lower().lstrip(".")
         self.format_out = self.format_out.lower().lstrip(".")
         self.progress = max(0.0, min(1.0, self.progress))
+        self.extra_inputs = [Path(p) for p in self.extra_inputs]
 
     @classmethod
     def from_paths(
@@ -44,6 +46,7 @@ class Task:
         output_path: Path,
         engine: str,
         options: dict | None = None,
+        extra_inputs: list[Path] | None = None,
     ) -> "Task":
         return cls(
             input_path=input_path,
@@ -52,7 +55,21 @@ class Task:
             format_out=Path(output_path).suffix.lstrip("."),
             engine=engine,
             options=options or {},
+            extra_inputs=list(extra_inputs or ()),
         )
+
+    @property
+    def inputs(self) -> list[Path]:
+        """All input paths in order: primary first, then extras."""
+        return [self.input_path, *self.extra_inputs]
+
+    @property
+    def formats_in(self) -> list[str]:
+        """Format (suffix) of every input path in order."""
+        return [
+            self.format_in,
+            *(p.suffix.lower().lstrip(".") for p in self.extra_inputs),
+        ]
 
     def append_log(self, message: str) -> None:
         self.log.append(message)

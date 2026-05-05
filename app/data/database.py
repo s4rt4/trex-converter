@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     error TEXT,
     retries INTEGER NOT NULL,
     max_retries INTEGER NOT NULL,
+    extra_inputs TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -45,12 +46,13 @@ class TaskRepository:
                 """
                 INSERT INTO tasks (
                     id, input_path, output_path, format_in, format_out, engine,
-                    options, status, progress, log, error, retries, max_retries
+                    options, status, progress, log, error, retries, max_retries,
+                    extra_inputs
                 )
                 VALUES (
                     :id, :input_path, :output_path, :format_in, :format_out,
                     :engine, :options, :status, :progress, :log, :error,
-                    :retries, :max_retries
+                    :retries, :max_retries, :extra_inputs
                 )
                 ON CONFLICT(id) DO UPDATE SET
                     input_path = excluded.input_path,
@@ -65,6 +67,7 @@ class TaskRepository:
                     error = excluded.error,
                     retries = excluded.retries,
                     max_retries = excluded.max_retries,
+                    extra_inputs = excluded.extra_inputs,
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 record,
@@ -109,6 +112,17 @@ class TaskRepository:
     def _migrate(self) -> None:
         with self._connect() as connection:
             connection.executescript(SCHEMA)
+            self._add_missing_columns(connection)
+
+    def _add_missing_columns(self, connection: sqlite3.Connection) -> None:
+        existing = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(tasks)").fetchall()
+        }
+        if "extra_inputs" not in existing:
+            connection.execute(
+                "ALTER TABLE tasks ADD COLUMN extra_inputs TEXT NOT NULL DEFAULT '[]'"
+            )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)

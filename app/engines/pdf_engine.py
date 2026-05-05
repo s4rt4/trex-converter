@@ -29,6 +29,7 @@ PDF_OPERATIONS = {
     "strip_metadata",
     "edit_metadata",
     "watermark_text",
+    "merge",
 }
 GRAVITY_TO_FRACTION = {
     "northwest": (0.05, 0.08),
@@ -119,6 +120,41 @@ class PDFEngine(BaseEngine):
         task.append_log(f"Wrote text: {output_path}")
         task.progress = 1.0
 
+    async def _run_merge(self, task: Task, output_path: Path) -> None:
+        fitz = _load_fitz()
+        sources = list(task.inputs)
+        if len(sources) < 2:
+            raise RuntimeError(
+                "PDF merge requires at least two input PDFs"
+            )
+        task.append_log(f"PDF merge: combining {len(sources)} document(s)")
+
+        result = fitz.open()
+        try:
+            for index, source_path in enumerate(sources, start=1):
+                chunk = fitz.open(str(source_path))
+                try:
+                    if chunk.needs_pass:
+                        raise RuntimeError(
+                            f"Cannot merge encrypted PDF: {source_path}"
+                        )
+                    result.insert_pdf(chunk)
+                    task.append_log(
+                        f"Appended {len(chunk)} page(s) from {source_path.name}"
+                    )
+                finally:
+                    _close(chunk)
+                task.progress = 0.05 + 0.85 * (index / len(sources))
+                await asyncio.sleep(0)
+            if len(result) == 0:
+                raise RuntimeError("Merged PDF has no pages")
+            result.save(str(output_path), garbage=3, deflate=True)
+        finally:
+            _close(result)
+
+        task.append_log(f"Wrote merged PDF: {output_path} ({len(sources)} sources)")
+        task.progress = 1.0
+
     async def _run_qpdf_repair(self, task: Task, output_path: Path) -> None:
         command = ["qpdf", str(task.input_path), str(output_path)]
         task.append_log("Running: " + " ".join(command))
@@ -182,6 +218,10 @@ class PDFEngine(BaseEngine):
 
         if operation == "repair":
             await self._run_qpdf_repair(task, output_path)
+            return
+
+        if operation == "merge":
+            await self._run_merge(task, output_path)
             return
 
         fitz = _load_fitz()

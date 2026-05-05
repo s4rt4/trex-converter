@@ -595,3 +595,128 @@ def test_pdf_engine_supports_html_output() -> None:
     engine = PDFEngine()
 
     assert engine.supports("pdf", "html")
+
+
+def _write_pdf(path: Path, fitz, marker: str, page_count: int = 1) -> None:
+    document = fitz.open()
+    for index in range(page_count):
+        page = document.new_page(width=200, height=200)
+        page.insert_text((50, 100), f"{marker}-{index + 1}")
+    document.save(str(path))
+    document.close()
+
+
+@pytest.mark.asyncio
+async def test_merge_concatenates_two_pdfs(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    a = tmp_path / "a.pdf"
+    b = tmp_path / "b.pdf"
+    _write_pdf(a, fitz, "A", page_count=2)
+    _write_pdf(b, fitz, "B", page_count=3)
+    output = tmp_path / "merged.pdf"
+
+    task = Task(
+        input_path=a,
+        output_path=output,
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "merge"},
+        extra_inputs=[b],
+    )
+
+    await PDFEngine().convert(task)
+
+    merged = fitz.open(str(output))
+    try:
+        assert len(merged) == 5
+        assert "A-1" in merged.load_page(0).get_text()
+        assert "B-1" in merged.load_page(2).get_text()
+        assert "B-3" in merged.load_page(4).get_text()
+    finally:
+        merged.close()
+    assert task.progress == 1.0
+
+
+@pytest.mark.asyncio
+async def test_merge_preserves_input_order(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    first = tmp_path / "first.pdf"
+    second = tmp_path / "second.pdf"
+    third = tmp_path / "third.pdf"
+    _write_pdf(first, fitz, "FIRST")
+    _write_pdf(second, fitz, "SECOND")
+    _write_pdf(third, fitz, "THIRD")
+    output = tmp_path / "out.pdf"
+
+    task = Task(
+        input_path=second,  # primary on purpose to verify ordering follows task.inputs
+        output_path=output,
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "merge"},
+        extra_inputs=[first, third],
+    )
+
+    await PDFEngine().convert(task)
+
+    merged = fitz.open(str(output))
+    try:
+        # Order matches task.inputs: primary first, then extras in given order.
+        assert "SECOND" in merged.load_page(0).get_text()
+        assert "FIRST" in merged.load_page(1).get_text()
+        assert "THIRD" in merged.load_page(2).get_text()
+    finally:
+        merged.close()
+
+
+@pytest.mark.asyncio
+async def test_merge_requires_at_least_two_inputs(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    only = tmp_path / "only.pdf"
+    _write_pdf(only, fitz, "ONLY")
+
+    task = Task(
+        input_path=only,
+        output_path=tmp_path / "out.pdf",
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "merge"},
+    )
+
+    with pytest.raises(RuntimeError, match="at least two"):
+        await PDFEngine().convert(task)
+
+
+@pytest.mark.asyncio
+async def test_merge_rejects_encrypted_input(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    a = tmp_path / "a.pdf"
+    b = tmp_path / "b.pdf"
+    _write_pdf(a, fitz, "A")
+    # Build an encrypted PDF
+    document = fitz.open()
+    document.new_page(width=100, height=100)
+    document.save(
+        str(b),
+        encryption=getattr(fitz, "PDF_ENCRYPT_AES_256", 4),
+        owner_pw="o",
+        user_pw="u",
+        permissions=-1,
+    )
+    document.close()
+
+    task = Task(
+        input_path=a,
+        output_path=tmp_path / "out.pdf",
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "merge"},
+        extra_inputs=[b],
+    )
+
+    with pytest.raises(RuntimeError, match="encrypted"):
+        await PDFEngine().convert(task)

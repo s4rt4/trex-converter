@@ -22,10 +22,16 @@ def task_to_record(task: Task) -> dict[str, object]:
         "error": task.error,
         "retries": task.retries,
         "max_retries": task.max_retries,
+        "extra_inputs": json.dumps([str(p) for p in task.extra_inputs]),
     }
 
 
 def task_from_row(row: Row) -> Task:
+    extra_inputs_raw = _row_get(row, "extra_inputs") or "[]"
+    try:
+        extra_inputs = [Path(p) for p in json.loads(extra_inputs_raw)]
+    except (TypeError, ValueError):
+        extra_inputs = []
     return Task(
         id=row["id"],
         input_path=Path(row["input_path"]),
@@ -40,4 +46,12 @@ def task_from_row(row: Row) -> Task:
         error=row["error"],
         retries=int(row["retries"]),
         max_retries=int(row["max_retries"]),
+        extra_inputs=extra_inputs,
     )
+
+
+def _row_get(row: Row, key: str) -> object | None:
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return None
