@@ -109,6 +109,7 @@ ROI tertinggi karena tool gratis dan use-case-nya luas.
 | Archive | tar / zip (stdlib) | [x] extract zip/tar/tgz/tbz/txz/gz/bz2/xz → folder (path-traversal & absolute-path guard, `tarfile.extract(filter='data')`); compress folder → zip/tar/tgz/tbz/txz via `zipfile.ZIP_DEFLATED` / `tarfile.open(mode=w/w:gz/w:bz2/w:xz)`. Archive Compress page pakai `directory_input=True` (folder picker). |
 | QR / Barcode | `qrencode` + `zbarimg` | [x] generate (txt → png/svg dengan size/margin/ECC L-M-Q-H) + decode (png/jpg/jpeg/bmp/tif/tiff/gif/webp → txt via zbarimg `--raw`) |
 | Metadata | exiftool | [ ] cross-cut: edit EXIF/ID3/PDF metadata di satu tempat |
+| SVG / Vector Tools | Inkscape | [ ] lihat #9 |
 
 ## 8. Cross-cutting
 
@@ -117,6 +118,41 @@ ROI tertinggi karena tool gratis dan use-case-nya luas.
 - [ ] Batch drag-and-drop multi-file
 - [ ] Preset save/load per modul
 - [ ] Packaging `.deb` final dengan dependency listing
+
+## 9. SVG / Vector Tools (Inkscape) — modul baru
+
+Tujuan: kemampuan vector-grade conversion dan SVG editing yang ImageMagick / PyMuPDF tidak cover. ImageMagick rasterize SVG via librsvg fallback (gradient/filter/text sering rusak); Inkscape adalah gold-standard untuk SVG.
+
+### Wave 1 — rendering & cleanup (paling sering dibutuhkan)
+
+- [ ] SVG → PNG dengan DPI / width / height (`inkscape input.svg --export-type=png --export-dpi=300 --export-filename=out.png`)
+- [ ] SVG → PDF (vector preserved, `--export-type=pdf`)
+- [ ] SVG → SVG **trim-to-content** (`--export-area-drawing --export-plain-svg`); update `viewBox` agar canvas fit ke bounding box gambar
+- [ ] SVG → SVG **plain cleanup** (`--export-plain-svg --vacuum-defs`); drop namespace `inkscape:`/`sodipodi:`, hapus `<defs>` yang tidak terpakai
+
+### Wave 2 — vector interop
+
+- [ ] SVG → EPS / PS (PostScript variants untuk print pipeline)
+- [ ] SVG → EMF / WMF (Windows print / Office embed)
+- [ ] PDF → SVG dengan vektor dipertahankan (`--pdf-page=N` per halaman; output bisa folder kalau multi-page)
+- [ ] **Text → paths** (`--export-text-to-path`) — eliminate font dependency, font yang dipakai di-outline jadi `<path>`
+
+### Wave 3 — utilities & advanced
+
+- [ ] Export single object/layer by ID (`--export-id=ID --export-id-only`)
+- [ ] DXF round-trip (CAD interop)
+- [ ] Pixmap → SVG trace (Inkscape Trace Bitmap, butuh `potrace` di samping)
+
+### Catatan dependency
+
+- Inkscape ~150MB di Debian (`apt install inkscape`). Worth-it kalau Wave 1 + 2 minimum dikerjakan sekaligus (≥6 fitur).
+- Alternatif **lightweight** kalau cuma butuh sebagian:
+  - `librsvg2-bin` / `rsvg-convert` (~5MB): cover SVG → PNG/PDF/PS/EPS rendering, **tapi tidak bisa edit** (no trim, no cleanup, no text-to-path, no SVG-out).
+  - Python-only trim: `lxml` parse + bbox computation per element type (`<rect>/<circle>/<path d=…>`), update `viewBox`. ~150 LOC, gratis, tapi rapuh untuk SVG kompleks (filter, clipPath, `<use>`, text dengan font metrics).
+
+### Saran sequencing
+
+Wave 1 paling tinggi value-per-effort: render berkualitas + trim + cleanup. Wave 2 nice-to-have untuk print/Office crowd. Wave 3 niche, bisa skip kecuali ada permintaan.
 
 ---
 
