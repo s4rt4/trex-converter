@@ -185,6 +185,75 @@ class SubtitleMergeOptionsPanel(QWidget):
         return options
 
 
+SPLIT_MODES = (
+    ("Every N pages", "every_n"),
+    ("Custom ranges", "range"),
+)
+
+
+class PDFSplitOptionsPanel(QWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("PDFSplitOptionsPanel")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(10)
+        grid.setColumnMinimumWidth(0, 140)
+        grid.setColumnStretch(1, 1)
+
+        self.mode_combo = _combo(self, SPLIT_MODES)
+        self.mode_combo.currentIndexChanged.connect(self._toggle_inputs)
+
+        self.pages_per_file_input = QSpinBox(self)
+        self.pages_per_file_input.setRange(1, 1000)
+        self.pages_per_file_input.setValue(1)
+        self.pages_per_file_input.setSuffix(" pages")
+        self.pages_per_file_input.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+
+        self.ranges_input = QLineEdit(self)
+        self.ranges_input.setPlaceholderText("e.g. 1-5, 6-10, 11-20")
+        self.ranges_input.setEnabled(False)
+
+        info = QLabel(
+            "Every N pages: each output covers consecutive N pages. "
+            "Custom ranges: comma-separated 1-based ranges; each range becomes "
+            "one output file. Outputs land in the chosen folder as "
+            "`<stem>-001.pdf`, `<stem>-002.pdf`, …",
+            self,
+        )
+        info.setWordWrap(True)
+
+        grid.addWidget(_field("Mode", self), 0, 0)
+        grid.addWidget(self.mode_combo, 0, 1)
+        grid.addWidget(_field("Pages per file", self), 1, 0)
+        grid.addWidget(self.pages_per_file_input, 1, 1)
+        grid.addWidget(_field("Ranges", self), 2, 0)
+        grid.addWidget(self.ranges_input, 2, 1)
+
+        layout.addLayout(grid)
+        layout.addWidget(info)
+        layout.addStretch(1)
+
+    def _toggle_inputs(self, _index: int) -> None:
+        is_range = self.mode_combo.currentData() == "range"
+        self.ranges_input.setEnabled(is_range)
+        self.pages_per_file_input.setEnabled(not is_range)
+
+    def collect_options(self) -> dict:
+        options: dict[str, object] = {"split_mode": self.mode_combo.currentData() or "every_n"}
+        if options["split_mode"] == "range":
+            ranges = self.ranges_input.text().strip()
+            if ranges:
+                options["split_ranges"] = ranges
+        else:
+            options["split_pages_per_file"] = self.pages_per_file_input.value()
+        return options
+
+
 def _combo(parent: QWidget, items: tuple[tuple[str, object], ...]) -> QComboBox:
     combo = QComboBox(parent)
     combo.setView(QListView(combo))

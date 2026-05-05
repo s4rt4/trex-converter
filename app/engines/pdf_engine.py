@@ -11,10 +11,12 @@ from app.engines.base import BaseEngine, EngineCapabilities
 
 PDF_IMAGE_FORMATS = {"jpg", "jpeg", "png"}
 PDF_TEXT_FORMATS = {"txt", "html"}
+PDF_FOLDER_OUTPUT = "folder"
 SUPPORTED_PAIRS = (
     {("pdf", format_out) for format_out in PDF_IMAGE_FORMATS}
     | {("pdf", "pdf")}
     | {("pdf", format_out) for format_out in PDF_TEXT_FORMATS}
+    | {("pdf", PDF_FOLDER_OUTPUT)}
 )
 DEFAULT_DPI = 200
 PDF_METADATA_FIELDS = ("title", "author", "subject", "keywords", "creator", "producer")
@@ -29,6 +31,7 @@ PDF_OPERATIONS = {
     "strip_metadata",
     "edit_metadata",
     "watermark_text",
+    "watermark_image",
     "merge",
 }
 GRAVITY_TO_FRACTION = {
@@ -57,6 +60,11 @@ class PDFEngine(BaseEngine):
     async def convert(self, task: Task) -> None:
         format_out = task.format_out.lower()
         output_path = Path(task.output_path)
+
+        if format_out == PDF_FOLDER_OUTPUT:
+            await self._run_split(task, output_path)
+            return
+
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         if format_out in PDF_IMAGE_FORMATS:
@@ -118,6 +126,40 @@ class PDFEngine(BaseEngine):
 
         output_path.write_text("\n".join(chunks), encoding="utf-8")
         task.append_log(f"Wrote text: {output_path}")
+        task.progress = 1.0
+
+    async def _run_split(self, task: Task, output_dir: Path) -> None:
+        fitz = _load_fitz()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        document = fitz.open(str(task.input_path))
+        try:
+            page_count = len(document)
+            if page_count == 0:
+                raise RuntimeError("PDF has no pages")
+
+            chunks = _resolve_split_ranges(task.options, page_count)
+            if not chunks:
+                raise RuntimeError("Split produced zero output files")
+
+            stem = Path(task.input_path).stem
+            for index, (start, end) in enumerate(chunks, start=1):
+                out_pdf = output_dir / f"{stem}-{index:03d}.pdf"
+                chunk_doc = fitz.open()
+                try:
+                    chunk_doc.insert_pdf(document, from_page=start, to_page=end)
+                    chunk_doc.save(str(out_pdf), garbage=3, deflate=True)
+                finally:
+                    _close(chunk_doc)
+                task.append_log(
+                    f"Wrote split {index}/{len(chunks)}: {out_pdf.name} "
+                    f"(pages {start + 1}-{end + 1})"
+                )
+                task.progress = 0.05 + 0.9 * (index / len(chunks))
+                await asyncio.sleep(0)
+        finally:
+            _close(document)
+
+        task.append_log(f"Split into {len(chunks)} file(s) under {output_dir}")
         task.progress = 1.0
 
     async def _run_merge(self, task: Task, output_path: Path) -> None:
@@ -250,6 +292,7 @@ class PDFEngine(BaseEngine):
                 "strip_metadata": _op_strip_metadata,
                 "edit_metadata": _op_edit_metadata,
                 "watermark_text": _op_watermark_text,
+                "watermark_image": _op_watermark_image,
             }[operation]
 
             handler(document, fitz, task, page_count)
@@ -356,6 +399,51 @@ def _op_watermark_text(document, fitz: ModuleType, task: Task, page_count: int) 
     )
 
 
+def _op_watermark_image(document, fitz: ModuleType, task: Task, page_count: int) -> None:
+    image_path = task.options.get("watermark_image_path")
+    if not image_path:
+        raise RuntimeError("watermark_image_path option is required")
+    image_path = Path(str(image_path))
+    if not image_path.exists():
+        raise RuntimeError(f"Watermark image not found: {image_path}")
+
+    gravity = str(task.options.get("watermark_position") or "center").lower()
+    fraction = GRAVITY_TO_FRACTION.get(gravity, GRAVITY_TO_FRACTION["center"])
+    width_fraction = _float_option(task.options.get("watermark_image_width_fraction"))
+    if width_fraction is None or width_fraction <= 0:
+        width_fraction = 0.25
+    width_fraction = max(0.01, min(1.0, width_fraction))
+
+    opacity = _int_option(task.options.get("watermark_opacity"))
+    if opacity is None:
+        opacity = 35
+    overlay = max(0.0, min(1.0, opacity / 100.0))
+
+    pixmap = fitz.Pixmap(str(image_path))
+    aspect = pixmap.height / pixmap.width if pixmap.width else 1.0
+
+    for index in range(page_count):
+        page = document.load_page(index)
+        rect = page.rect
+        target_width = rect.width * width_fraction
+        target_height = target_width * aspect
+        anchor_x = rect.x0 + rect.width * fraction[0]
+        anchor_y = rect.y0 + rect.height * fraction[1]
+        x0 = anchor_x - target_width / 2
+        y0 = anchor_y - target_height / 2
+        target = fitz.Rect(x0, y0, x0 + target_width, y0 + target_height)
+        page.insert_image(target, filename=str(image_path), overlay=True)
+        # PyMuPDF lacks a per-image alpha argument on insert_image in older
+        # versions; emulate translucency by drawing a soft fill rectangle.
+        if overlay < 0.999:
+            page.draw_rect(target, color=None, fill=(1, 1, 1), fill_opacity=1 - overlay, overlay=True)
+
+    task.append_log(
+        f"Watermarked {page_count} page(s) with image {image_path.name} "
+        f"(width {width_fraction:.0%}, opacity {opacity}%, gravity {gravity})"
+    )
+
+
 def _save_kwargs_for(operation: str, fitz: ModuleType, task: Task) -> dict:
     if operation == "compress":
         return {"garbage": 4, "deflate": True, "clean": True}
@@ -414,6 +502,15 @@ def _int_option(value: object) -> int | None:
         return None
 
 
+def _float_option(value: object) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _selected_pages(task: Task, page_count: int) -> list[int]:
     page_range = task.options.get("pages")
     if page_range:
@@ -433,6 +530,38 @@ def _selected_pages(task: Task, page_count: int) -> list[int]:
     if page_number < 1 or page_number > page_count:
         raise RuntimeError(f"PDF page {page_number} is outside 1-{page_count}")
     return [page_number - 1]
+
+
+def _resolve_split_ranges(options: dict, page_count: int) -> list[tuple[int, int]]:
+    mode = str(options.get("split_mode") or "every_n").lower()
+
+    if mode == "every_n":
+        per_file = _int_option(options.get("split_pages_per_file")) or 1
+        if per_file < 1:
+            raise RuntimeError("split_pages_per_file must be >= 1")
+        return [
+            (start, min(start + per_file - 1, page_count - 1))
+            for start in range(0, page_count, per_file)
+        ]
+
+    if mode == "range":
+        raw = options.get("split_ranges")
+        if raw in (None, ""):
+            raise RuntimeError("split_mode=range requires split_ranges (e.g. '1-5,6-10')")
+        ranges: list[tuple[int, int]] = []
+        for token in str(raw).split(","):
+            token = token.strip()
+            if not token:
+                continue
+            indices = _parse_page_range(token, page_count)
+            if not indices:
+                continue
+            ranges.append((indices[0], indices[-1]))
+        if not ranges:
+            raise RuntimeError(f"No usable ranges in split_ranges: {raw}")
+        return ranges
+
+    raise RuntimeError(f"Unsupported split_mode: {mode}")
 
 
 def _parse_page_range(raw: object, page_count: int) -> list[int]:

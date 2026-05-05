@@ -17,6 +17,7 @@ from app.ui.image_options import ImageOptionsPanel
 from app.ui.multi_input_options import (
     AudioMixOptionsPanel,
     ImageMontageOptionsPanel,
+    PDFSplitOptionsPanel,
     SubtitleMergeOptionsPanel,
 )
 from app.ui.ocr_options import OCROptionsPanel
@@ -132,6 +133,26 @@ PAGE_CONFIGS = (
         force_engine=True,
         multi_input=True,
         default_options=(("operation", "merge"),),
+    ),
+    ConversionPageConfig(
+        title="PDF Split",
+        input_formats=("pdf",),
+        default_output="folder",
+        engine_name="pdf",
+        kind="pdf-split",
+        force_engine=True,
+        directory_output=True,
+        extra_options_factory=PDFSplitOptionsPanel,
+    ),
+    ConversionPageConfig(
+        title="Document Merge",
+        input_formats=tuple(sorted({*SUPPORTED_INPUT_FORMATS, "pdf"})),
+        default_output="pdf",
+        engine_name="libreoffice",
+        kind="document-merge",
+        force_engine=True,
+        multi_input=True,
+        default_options=(("operation", "bulk_merge_to_pdf"),),
     ),
     ConversionPageConfig(
         title="Video Concat",
@@ -814,6 +835,8 @@ def _page_icon(kind: str):
         "document": "fa5s.file-alt",
         "pdf": "fa5s.file-pdf",
         "pdf-merge": "fa5s.copy",
+        "pdf-split": "fa5s.cut",
+        "document-merge": "fa5s.file-medical",
         "video-concat": "fa5s.film",
         "audio-mix": "fa5s.compact-disc",
         "image-montage": "fa5s.th",

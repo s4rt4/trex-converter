@@ -38,49 +38,122 @@ class LibreOfficeEngine(BaseEngine):
         self._processes: dict[str, asyncio.subprocess.Process] = {}
 
     async def convert(self, task: Task) -> None:
+        operation = str(task.options.get("operation") or "").lower()
+        if operation == "bulk_merge_to_pdf":
+            await self._bulk_merge_to_pdf(task)
+            return
+
         output_path = Path(task.output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with tempfile.TemporaryDirectory(prefix="trex-libreoffice-") as temp_dir:
             temp_output_dir = Path(temp_dir)
-            command = self._build_command(task, temp_output_dir)
-            task.append_log("Running: " + " ".join(command))
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            await self._convert_one(task, task.input_path, temp_output_dir, task.format_out)
+            produced_path = _find_converted_file(
+                task.input_path, temp_output_dir, task.format_out
             )
-            self._processes[task.id] = process
+            shutil.move(str(produced_path), str(output_path))
+            task.progress = 1.0
 
-            try:
-                timeout = _timeout_seconds(task)
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=timeout,
-                )
-                _append_output(task, stdout)
-                _append_output(task, stderr)
-
-                if process.returncode != 0:
-                    raise RuntimeError(
-                        f"LibreOffice exited with code {process.returncode}"
-                    )
-
-                produced_path = _find_converted_file(
-                    task.input_path, temp_output_dir, task.format_out
-                )
-                shutil.move(str(produced_path), str(output_path))
-                task.progress = 1.0
-            except asyncio.TimeoutError as exc:
-                await self.cancel(task)
+    async def _convert_one(
+        self,
+        task: Task,
+        input_path: Path,
+        output_dir: Path,
+        format_out: str,
+    ) -> None:
+        command = [
+            "libreoffice",
+            "--headless",
+            "--nologo",
+            "--nofirststartwizard",
+            "--convert-to",
+            format_out,
+            "--outdir",
+            str(output_dir),
+            str(input_path),
+        ]
+        task.append_log("Running: " + " ".join(command))
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        self._processes[task.id] = process
+        try:
+            timeout = _timeout_seconds(task)
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=timeout,
+            )
+            _append_output(task, stdout)
+            _append_output(task, stderr)
+            if process.returncode != 0:
                 raise RuntimeError(
-                    f"LibreOffice timed out after {_timeout_seconds(task)} seconds"
-                ) from exc
-            except asyncio.CancelledError:
-                await self.cancel(task)
-                raise
+                    f"LibreOffice exited with code {process.returncode}"
+                )
+        except asyncio.TimeoutError as exc:
+            await self.cancel(task)
+            raise RuntimeError(
+                f"LibreOffice timed out after {_timeout_seconds(task)} seconds"
+            ) from exc
+        except asyncio.CancelledError:
+            await self.cancel(task)
+            raise
+        finally:
+            self._processes.pop(task.id, None)
+
+    async def _bulk_merge_to_pdf(self, task: Task) -> None:
+        sources = list(task.inputs)
+        if len(sources) < 2:
+            raise RuntimeError("Bulk merge requires at least two input documents")
+
+        try:
+            import fitz
+        except ImportError as exc:
+            raise RuntimeError(
+                "PyMuPDF is required for bulk merge. Reinstall with: pip install -e ."
+            ) from exc
+
+        output_path = Path(task.output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        task.append_log(f"Bulk merge: combining {len(sources)} document(s) to PDF")
+
+        with tempfile.TemporaryDirectory(prefix="trex-bulk-merge-") as temp_dir:
+            temp_root = Path(temp_dir)
+            stage_pdfs: list[Path] = []
+            for index, source in enumerate(sources, start=1):
+                if source.suffix.lower().lstrip(".") == "pdf":
+                    stage_pdfs.append(source)
+                    task.append_log(f"[{index}/{len(sources)}] kept PDF: {source.name}")
+                else:
+                    convert_dir = temp_root / f"src-{index:03d}"
+                    convert_dir.mkdir(parents=True, exist_ok=True)
+                    await self._convert_one(task, source, convert_dir, "pdf")
+                    produced = _find_converted_file(source, convert_dir, "pdf")
+                    stage_pdfs.append(produced)
+                    task.append_log(
+                        f"[{index}/{len(sources)}] converted {source.name} -> PDF"
+                    )
+                task.progress = 0.05 + 0.7 * (index / len(sources))
+                await asyncio.sleep(0)
+
+            result = fitz.open()
+            try:
+                for pdf_path in stage_pdfs:
+                    chunk = fitz.open(str(pdf_path))
+                    try:
+                        result.insert_pdf(chunk)
+                    finally:
+                        chunk.close()
+                if len(result) == 0:
+                    raise RuntimeError("Bulk merge produced an empty PDF")
+                result.save(str(output_path), garbage=3, deflate=True)
             finally:
-                self._processes.pop(task.id, None)
+                result.close()
+
+        task.append_log(f"Wrote merged PDF: {output_path} ({len(sources)} sources)")
+        task.progress = 1.0
 
     async def cancel(self, task: Task) -> None:
         process = self._processes.get(task.id)

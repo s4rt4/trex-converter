@@ -7,11 +7,13 @@ try:
         QCheckBox,
         QComboBox,
         QDoubleSpinBox,
+        QFileDialog,
         QGridLayout,
         QHBoxLayout,
         QLabel,
         QLineEdit,
         QListView,
+        QPushButton,
         QSlider,
         QSpinBox,
         QTabWidget,
@@ -20,7 +22,7 @@ try:
     )
 except ImportError:  # pragma: no cover
     Qt = None
-    QAbstractSpinBox = QCheckBox = QComboBox = QDoubleSpinBox = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QSlider = QSpinBox = QTabWidget = QVBoxLayout = QWidget = None
+    QAbstractSpinBox = QCheckBox = QComboBox = QDoubleSpinBox = QFileDialog = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QPushButton = QSlider = QSpinBox = QTabWidget = QVBoxLayout = QWidget = None
 
 
 RESIZE_MODES = (
@@ -237,6 +239,18 @@ class ImageOptionsPanel(QWidget):
         self.watermark_size_input.setSuffix(" pt")
         _use_stepper(self.watermark_size_input)
 
+        self.watermark_image_input = QLineEdit(page)
+        self.watermark_image_input.setPlaceholderText("/path/to/logo.png (empty = no image)")
+        self.watermark_image_browse = QPushButton("Browse", page)
+        self.watermark_image_browse.clicked.connect(self._choose_watermark_image)
+
+        self.watermark_image_width_input = QSpinBox(page)
+        self.watermark_image_width_input.setRange(0, 4096)
+        self.watermark_image_width_input.setValue(0)
+        self.watermark_image_width_input.setSpecialValueText("source")
+        self.watermark_image_width_input.setSuffix(" px")
+        _use_stepper(self.watermark_image_width_input)
+
         grid.addWidget(_field("Text", page), 0, 0)
         grid.addWidget(self.watermark_text_input, 0, 1, 1, 3)
         grid.addWidget(_field("Position", page), 1, 0)
@@ -251,8 +265,26 @@ class ImageOptionsPanel(QWidget):
             1,
             3,
         )
+        grid.addWidget(_field("Image", page), 3, 0)
+        image_row = QHBoxLayout()
+        image_row.setSpacing(8)
+        image_row.addWidget(self.watermark_image_input, 1)
+        image_row.addWidget(self.watermark_image_browse)
+        grid.addLayout(image_row, 3, 1, 1, 3)
+        grid.addWidget(_field("Image width", page), 4, 0)
+        grid.addWidget(self.watermark_image_width_input, 4, 1)
 
         return page
+
+    def _choose_watermark_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose watermark image",
+            "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp)",
+        )
+        if path:
+            self.watermark_image_input.setText(path)
 
     def _update_resize_placeholder(self, _index: int) -> None:
         mode = self.resize_mode_combo.currentData()
@@ -334,6 +366,17 @@ class ImageOptionsPanel(QWidget):
             )
             options["watermark_opacity"] = self.watermark_opacity_slider.value()
             options["watermark_size"] = self.watermark_size_input.value()
+
+        watermark_image = self.watermark_image_input.text().strip()
+        if watermark_image:
+            options["watermark_image_path"] = watermark_image
+            options["watermark_image_position"] = (
+                self.watermark_position_combo.currentData() or "southeast"
+            )
+            options["watermark_image_opacity"] = self.watermark_opacity_slider.value()
+            width = self.watermark_image_width_input.value()
+            if width > 0:
+                options["watermark_image_width"] = width
 
         return options
 

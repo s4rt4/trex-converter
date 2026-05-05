@@ -720,3 +720,208 @@ async def test_merge_rejects_encrypted_input(tmp_path) -> None:
 
     with pytest.raises(RuntimeError, match="encrypted"):
         await PDFEngine().convert(task)
+
+
+# ---- PDF split ----
+
+
+@pytest.mark.asyncio
+async def test_split_every_n_writes_files_into_directory(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    for index in range(7):
+        page = document.new_page(width=200, height=200)
+        page.insert_text((50, 100), f"P{index + 1}")
+    document.save(str(src))
+    document.close()
+
+    out_dir = tmp_path / "out"
+
+    task = Task(
+        input_path=src,
+        output_path=out_dir,
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"split_mode": "every_n", "split_pages_per_file": 3},
+    )
+
+    await PDFEngine().convert(task)
+
+    files = sorted(out_dir.glob("*.pdf"))
+    assert [f.name for f in files] == ["src-001.pdf", "src-002.pdf", "src-003.pdf"]
+    # 7 pages / 3 per file -> 3 files: 3 + 3 + 1
+    sizes = [len(fitz.open(str(f))) for f in files]
+    assert sizes == [3, 3, 1]
+
+
+@pytest.mark.asyncio
+async def test_split_custom_ranges(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    for index in range(10):
+        document.new_page(width=200, height=200)
+    document.save(str(src))
+    document.close()
+
+    out_dir = tmp_path / "out"
+
+    task = Task(
+        input_path=src,
+        output_path=out_dir,
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"split_mode": "range", "split_ranges": "1-3, 4-6, 7-10"},
+    )
+
+    await PDFEngine().convert(task)
+
+    files = sorted(out_dir.glob("*.pdf"))
+    assert len(files) == 3
+    assert [len(fitz.open(str(f))) for f in files] == [3, 3, 4]
+
+
+@pytest.mark.asyncio
+async def test_split_range_mode_requires_ranges(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    document.new_page(width=200, height=200)
+    document.save(str(src))
+    document.close()
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out",
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"split_mode": "range"},
+    )
+
+    with pytest.raises(RuntimeError, match="split_ranges"):
+        await PDFEngine().convert(task)
+
+
+@pytest.mark.asyncio
+async def test_split_unknown_mode_raises(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    document.new_page(width=200, height=200)
+    document.save(str(src))
+    document.close()
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out",
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"split_mode": "every_other_blue_moon"},
+    )
+
+    with pytest.raises(RuntimeError, match="Unsupported split_mode"):
+        await PDFEngine().convert(task)
+
+
+def test_pdf_engine_supports_pdf_to_folder() -> None:
+    assert PDFEngine().supports("pdf", "folder")
+
+
+# ---- PDF watermark image ----
+
+
+@pytest.mark.asyncio
+async def test_watermark_image_inserts_image_on_each_page(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    for _ in range(2):
+        document.new_page(width=400, height=400)
+    document.save(str(src))
+    document.close()
+
+    # Create a 1x1 PNG via fitz Pixmap + save
+    image_path = tmp_path / "logo.png"
+    pixmap = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 50, 50), 0)
+    pixmap.clear_with(0)
+    pixmap.save(str(image_path))
+
+    output = tmp_path / "out.pdf"
+
+    task = Task(
+        input_path=src,
+        output_path=output,
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={
+            "operation": "watermark_image",
+            "watermark_image_path": str(image_path),
+            "watermark_position": "southeast",
+            "watermark_image_width_fraction": 0.2,
+            "watermark_opacity": 50,
+        },
+    )
+
+    await PDFEngine().convert(task)
+
+    result = fitz.open(str(output))
+    try:
+        # Each page gets one inserted image (XObject)
+        for page in result:
+            xrefs = page.get_images(full=True)
+            assert len(xrefs) >= 1
+    finally:
+        result.close()
+
+
+@pytest.mark.asyncio
+async def test_watermark_image_requires_path(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    document.new_page(width=200, height=200)
+    document.save(str(src))
+    document.close()
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.pdf",
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "watermark_image"},
+    )
+
+    with pytest.raises(RuntimeError, match="watermark_image_path"):
+        await PDFEngine().convert(task)
+
+
+@pytest.mark.asyncio
+async def test_watermark_image_path_must_exist(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    document = fitz.open()
+    document.new_page(width=200, height=200)
+    document.save(str(src))
+    document.close()
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.pdf",
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={
+            "operation": "watermark_image",
+            "watermark_image_path": str(tmp_path / "nonexistent.png"),
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="not found"):
+        await PDFEngine().convert(task)

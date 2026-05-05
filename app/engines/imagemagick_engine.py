@@ -191,6 +191,10 @@ class ImageMagickEngine(BaseEngine):
             command.extend(_watermark_args(watermark_text, options))
             command.extend(["-gravity", "none"])
 
+        watermark_image = options.get("watermark_image_path")
+        if watermark_image:
+            command.extend(_image_watermark_args(str(watermark_image), options))
+
         if options.get("strip"):
             command.append("-strip")
 
@@ -294,6 +298,44 @@ def _resolve_resize(options: dict) -> str | None:
         pixels = int(megapixels * 1_000_000)
         return f"@{pixels}"
     return text
+
+
+def _image_watermark_args(image_path: str, options: dict) -> list[str]:
+    gravity = str(options.get("watermark_image_position") or options.get("watermark_position") or "southeast").lower()
+    if gravity not in VALID_GRAVITIES:
+        gravity = "southeast"
+    width = _int_option(options.get("watermark_image_width"))
+    opacity = _int_option(options.get("watermark_image_opacity"))
+    if opacity is None:
+        opacity = _int_option(options.get("watermark_opacity"))
+    if opacity is None:
+        opacity = 100
+    opacity = max(0, min(100, opacity))
+    margin_x = _int_option(options.get("watermark_image_margin_x"))
+    margin_y = _int_option(options.get("watermark_image_margin_y"))
+    if margin_x is None:
+        margin_x = 20
+    if margin_y is None:
+        margin_y = 20
+
+    args: list[str] = ["(", image_path]
+    if width and width > 0:
+        args.extend(["-resize", f"{width}x"])
+    if opacity < 100:
+        args.extend([
+            "-alpha", "set",
+            "-channel", "A",
+            "-evaluate", "multiply", _format_float(opacity / 100.0),
+            "+channel",
+        ])
+    args.append(")")
+    args.extend([
+        "-gravity", gravity,
+        "-geometry", f"+{margin_x}+{margin_y}",
+        "-compose", "over",
+        "-composite",
+    ])
+    return args
 
 
 def _watermark_args(text: str, options: dict) -> list[str]:

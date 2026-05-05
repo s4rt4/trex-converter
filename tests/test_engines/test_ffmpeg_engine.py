@@ -795,3 +795,47 @@ def test_audio_mix_invalid_duration_raises() -> None:
             format_in="mp3",
             format_out="mp3",
         )
+
+
+# ---- Cover art (ID3 APIC) ----
+
+
+def test_cover_art_attaches_second_input_with_attached_pic_disposition() -> None:
+    command = _build(
+        {"cover_art_path": "/tmp/cover.jpg"},
+        format_in="mp3",
+        format_out="mp3",
+    )
+
+    inputs = [command[i + 1] for i, arg in enumerate(command) if arg == "-i"]
+    assert inputs == ["in.mp3", "/tmp/cover.jpg"]
+    map_args = [command[i + 1] for i, arg in enumerate(command) if arg == "-map"]
+    assert map_args == ["0:a", "1"]
+    assert command[command.index("-disposition:v") + 1] == "attached_pic"
+    assert command[command.index("-c:v") + 1] == "copy"
+
+
+def test_cover_art_only_applied_for_audio_output() -> None:
+    # Video output ignores cover_art_path (it's an audio-only feature)
+    command = _build(
+        {"cover_art_path": "/tmp/cover.jpg"},
+        format_in="mp4",
+        format_out="mp4",
+    )
+
+    inputs = [command[i + 1] for i, arg in enumerate(command) if arg == "-i"]
+    assert inputs == ["in.mp4"]
+    assert "-disposition:v" not in command
+
+
+def test_cover_art_does_not_clobber_audio_filters() -> None:
+    command = _build(
+        {"cover_art_path": "/tmp/cover.jpg", "volume_db": 3, "id3_title": "Hi"},
+        format_in="mp3",
+        format_out="mp3",
+    )
+
+    af = command[command.index("-af") + 1]
+    assert af == "volume=+3dB"
+    metadata = [command[i + 1] for i, arg in enumerate(command) if arg == "-metadata"]
+    assert "title=Hi" in metadata

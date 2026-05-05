@@ -138,6 +138,8 @@ def default_entries() -> list[RegistryEntry]:
         ],
         ("pdf", "pdf", "pdf", PDFEngine),
         ("pdf", "txt", "pdf", PDFEngine),
+        ("pdf", "html", "pdf", PDFEngine),
+        ("pdf", "folder", "pdf", PDFEngine),
     ] + ffmpeg_pairs + document_pairs + image_pairs + ocr_pairs + subtitle_pairs + archive_pairs + qr_pairs
     return [
         RegistryEntry(

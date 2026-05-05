@@ -51,6 +51,8 @@ Sidebar menu:
 - OCR
 - PDF Tools
 - PDF Merge
+- PDF Split
+- Document Merge
 - Video Concat
 - Audio Mix
 - Image Montage
@@ -173,7 +175,7 @@ cd /home/sarta/Project/trex-converter
 Current expected result:
 
 ```text
-224 passed
+242 passed
 ```
 
 ## System Dependencies

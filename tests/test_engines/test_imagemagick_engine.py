@@ -260,3 +260,67 @@ def test_montage_invalid_geometry_raises() -> None:
             {"montage_geometry": "not-geometry"},
             [Path("a.png"), Path("b.png")],
         )
+
+
+# ---- Image watermark (PNG overlay) ----
+
+
+def test_watermark_image_appends_paren_block_and_composite() -> None:
+    command = _build({"watermark_image_path": "/tmp/logo.png"})
+
+    assert "(" in command
+    assert ")" in command
+    paren_open = command.index("(")
+    paren_close = command.index(")")
+    assert command[paren_open + 1] == "/tmp/logo.png"
+    assert paren_close > paren_open
+    # After ): gravity, geometry, compose, composite
+    assert command[paren_close + 1] == "-gravity"
+    assert command[command.index("-compose") + 1] == "over"
+    assert "-composite" in command
+
+
+def test_watermark_image_position_size_and_opacity() -> None:
+    command = _build(
+        {
+            "watermark_image_path": "/tmp/logo.png",
+            "watermark_image_position": "northwest",
+            "watermark_image_width": 200,
+            "watermark_image_opacity": 50,
+            "watermark_image_margin_x": 12,
+            "watermark_image_margin_y": 8,
+        }
+    )
+
+    paren_open = command.index("(")
+    paren_close = command.index(")")
+    inside = command[paren_open + 1 : paren_close]
+    assert "/tmp/logo.png" in inside
+    assert inside[inside.index("-resize") + 1] == "200x"
+    # Opacity multiplier applied via colorchannel evaluate
+    assert "-evaluate" in inside
+    assert inside[inside.index("multiply") + 1] == "0.5"
+
+    assert command[command.index("-gravity") + 1] == "northwest"
+    assert command[command.index("-geometry") + 1] == "+12+8"
+
+
+def test_watermark_image_falls_back_to_text_position_when_image_position_missing() -> None:
+    command = _build(
+        {
+            "watermark_image_path": "/tmp/logo.png",
+            "watermark_position": "south",
+        }
+    )
+
+    assert command[command.index("-gravity") + 1] == "south"
+
+
+def test_watermark_image_full_opacity_skips_evaluate_block() -> None:
+    command = _build({"watermark_image_path": "/tmp/logo.png"})
+
+    paren_open = command.index("(")
+    paren_close = command.index(")")
+    inside = command[paren_open + 1 : paren_close]
+    # Default opacity is 100 -> no alpha channel manipulation
+    assert "-evaluate" not in inside

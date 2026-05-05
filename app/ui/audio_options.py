@@ -7,11 +7,13 @@ try:
         QCheckBox,
         QComboBox,
         QDoubleSpinBox,
+        QFileDialog,
         QGridLayout,
         QHBoxLayout,
         QLabel,
         QLineEdit,
         QListView,
+        QPushButton,
         QSlider,
         QTabWidget,
         QVBoxLayout,
@@ -19,7 +21,7 @@ try:
     )
 except ImportError:  # pragma: no cover
     Qt = None
-    QAbstractSpinBox = QCheckBox = QComboBox = QDoubleSpinBox = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QSlider = QTabWidget = QVBoxLayout = QWidget = None
+    QAbstractSpinBox = QCheckBox = QComboBox = QDoubleSpinBox = QFileDialog = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QPushButton = QSlider = QTabWidget = QVBoxLayout = QWidget = None
 
 
 CHANNEL_LAYOUTS = (
@@ -135,6 +137,11 @@ class AudioOptionsPanel(QWidget):
         self.tag_track_input = QLineEdit(page)
         self.tag_track_input.setPlaceholderText("e.g. 11/12")
 
+        self.cover_art_input = QLineEdit(page)
+        self.cover_art_input.setPlaceholderText("/path/to/cover.jpg (empty = no cover)")
+        self.cover_art_browse = QPushButton("Browse", page)
+        self.cover_art_browse.clicked.connect(self._choose_cover_art)
+
         grid.addWidget(_field("Title", page), 0, 0)
         grid.addWidget(self.tag_title_input, 0, 1, 1, 3)
         grid.addWidget(_field("Artist", page), 1, 0)
@@ -147,15 +154,32 @@ class AudioOptionsPanel(QWidget):
         grid.addWidget(self.tag_genre_input, 2, 3)
         grid.addWidget(_field("Track", page), 3, 0)
         grid.addWidget(self.tag_track_input, 3, 1)
+        grid.addWidget(_field("Cover art", page), 4, 0)
+        cover_row = QHBoxLayout()
+        cover_row.setSpacing(8)
+        cover_row.addWidget(self.cover_art_input, 1)
+        cover_row.addWidget(self.cover_art_browse)
+        grid.addLayout(cover_row, 4, 1, 1, 3)
 
         info = QLabel(
             "Empty fields are skipped. Tags require an output format that supports "
-            "metadata (mp3, m4a, flac, ogg, opus).",
+            "metadata (mp3, m4a, flac, ogg, opus). Cover art attaches an image as "
+            "an APIC frame (best support: mp3 / m4a).",
             page,
         )
         info.setWordWrap(True)
-        grid.addWidget(info, 4, 0, 1, 4)
+        grid.addWidget(info, 5, 0, 1, 4)
         return page
+
+    def _choose_cover_art(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose cover art",
+            "",
+            "Images (*.jpg *.jpeg *.png *.bmp)",
+        )
+        if path:
+            self.cover_art_input.setText(path)
 
     def _build_output_page(self, parent: QWidget) -> QWidget:
         page = QWidget(parent)
@@ -217,6 +241,10 @@ class AudioOptionsPanel(QWidget):
             value = widget.text().strip()
             if value:
                 options[f"id3_{option_key}"] = value
+
+        cover_art = self.cover_art_input.text().strip()
+        if cover_art:
+            options["cover_art_path"] = cover_art
 
         channels = self.channels_combo.currentData()
         if channels:

@@ -436,6 +436,10 @@ class ConversionPage(QWidget):
             return output in {*IMAGE_FORMATS, "txt", "pdf", "html"}
         if self.config.kind == "pdf-merge":
             return output == "pdf"
+        if self.config.kind == "pdf-split":
+            return output == "folder"
+        if self.config.kind == "document-merge":
+            return output == "pdf"
         if self.config.kind == "video-concat":
             return output in {"mp4", "mov", "mkv", "webm"}
         if self.config.kind == "audio-mix":

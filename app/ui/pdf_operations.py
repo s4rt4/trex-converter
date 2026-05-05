@@ -6,11 +6,13 @@ try:
         QAbstractSpinBox,
         QCheckBox,
         QComboBox,
+        QFileDialog,
         QGridLayout,
         QHBoxLayout,
         QLabel,
         QLineEdit,
         QListView,
+        QPushButton,
         QSlider,
         QSpinBox,
         QTabWidget,
@@ -19,7 +21,7 @@ try:
     )
 except ImportError:  # pragma: no cover
     Qt = None
-    QAbstractSpinBox = QCheckBox = QComboBox = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QSlider = QSpinBox = QTabWidget = QVBoxLayout = QWidget = None
+    QAbstractSpinBox = QCheckBox = QComboBox = QFileDialog = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QPushButton = QSlider = QSpinBox = QTabWidget = QVBoxLayout = QWidget = None
 
 
 PAGE_ACTIONS = (
@@ -146,6 +148,11 @@ class PDFOperationsPanel(QWidget):
         self.watermark_text_input = QLineEdit(page)
         self.watermark_text_input.setPlaceholderText("e.g. CONFIDENTIAL")
 
+        self.watermark_image_input = QLineEdit(page)
+        self.watermark_image_input.setPlaceholderText("/path/to/logo.png (empty = text watermark)")
+        self.watermark_image_browse = QPushButton("Browse", page)
+        self.watermark_image_browse.clicked.connect(self._choose_watermark_image)
+
         self.watermark_position_combo = _combo(page, GRAVITIES)
         for index, (_, value) in enumerate(GRAVITIES):
             if value == "center":
@@ -158,25 +165,49 @@ class PDFOperationsPanel(QWidget):
         self.watermark_size_input.setSuffix(" pt")
         _use_stepper(self.watermark_size_input)
 
+        self.watermark_image_width_input = QSpinBox(page)
+        self.watermark_image_width_input.setRange(5, 100)
+        self.watermark_image_width_input.setValue(25)
+        self.watermark_image_width_input.setSuffix(" % page")
+        _use_stepper(self.watermark_image_width_input)
+
         self.watermark_opacity_slider, self.watermark_opacity_label = _slider(
             page, 5, 100, 35, suffix="%"
         )
 
         grid.addWidget(_field("Text", page), 0, 0)
         grid.addWidget(self.watermark_text_input, 0, 1, 1, 3)
-        grid.addWidget(_field("Position", page), 1, 0)
-        grid.addWidget(self.watermark_position_combo, 1, 1)
-        grid.addWidget(_field("Size", page), 1, 2)
-        grid.addWidget(self.watermark_size_input, 1, 3)
-        grid.addWidget(_field("Opacity", page), 2, 0)
+        grid.addWidget(_field("Image", page), 1, 0)
+        image_row = QHBoxLayout()
+        image_row.setSpacing(8)
+        image_row.addWidget(self.watermark_image_input, 1)
+        image_row.addWidget(self.watermark_image_browse)
+        grid.addLayout(image_row, 1, 1, 1, 3)
+        grid.addWidget(_field("Position", page), 2, 0)
+        grid.addWidget(self.watermark_position_combo, 2, 1)
+        grid.addWidget(_field("Text size", page), 2, 2)
+        grid.addWidget(self.watermark_size_input, 2, 3)
+        grid.addWidget(_field("Image width", page), 3, 0)
+        grid.addWidget(self.watermark_image_width_input, 3, 1)
+        grid.addWidget(_field("Opacity", page), 4, 0)
         grid.addLayout(
             _slider_row(self.watermark_opacity_slider, self.watermark_opacity_label),
-            2,
+            4,
             1,
             1,
             3,
         )
         return page
+
+    def _choose_watermark_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose watermark image",
+            "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp)",
+        )
+        if path:
+            self.watermark_image_input.setText(path)
 
     def _build_metadata_tab(self, parent: QWidget) -> QWidget:
         page = QWidget(parent)
@@ -250,14 +281,28 @@ class PDFOperationsPanel(QWidget):
 
         if tab == "watermark":
             text = self.watermark_text_input.text().strip()
+            image_path = self.watermark_image_input.text().strip()
+            position = self.watermark_position_combo.currentData() or "center"
+            opacity = self.watermark_opacity_slider.value()
+            if image_path:
+                options = {
+                    "operation": "watermark_image",
+                    "watermark_image_path": image_path,
+                    "watermark_position": position,
+                    "watermark_image_width_fraction": (
+                        self.watermark_image_width_input.value() / 100.0
+                    ),
+                    "watermark_opacity": opacity,
+                }
+                if text:
+                    options["watermark_text"] = text
+                return options
             options = {"operation": "watermark_text"}
             if text:
                 options["watermark_text"] = text
-                options["watermark_position"] = (
-                    self.watermark_position_combo.currentData() or "center"
-                )
+                options["watermark_position"] = position
                 options["watermark_size"] = self.watermark_size_input.value()
-                options["watermark_opacity"] = self.watermark_opacity_slider.value()
+                options["watermark_opacity"] = opacity
             return options
 
         if tab == "metadata":

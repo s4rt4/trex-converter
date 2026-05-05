@@ -155,10 +155,13 @@ class FFmpegEngine(BaseEngine):
         is_image_only = fmt_out in IMAGE_OUTPUT_SET
         is_animated_image = fmt_out == "webp"
         use_logo = bool(options.get("logo_path")) and not is_audio_only and not is_image_only
+        cover_art_path = options.get("cover_art_path") if is_audio_only else None
 
         command = ["ffmpeg", "-y", "-i", str(task.input_path)]
         if use_logo:
             command.extend(["-i", str(options["logo_path"])])
+        if cover_art_path:
+            command.extend(["-i", str(cover_art_path)])
         command.extend(_trim_options(options))
 
         if is_image_only:
@@ -182,6 +185,10 @@ class FFmpegEngine(BaseEngine):
             command.extend(["-af", audio_filter])
 
         command.extend(_codec_options(task))
+
+        if cover_art_path:
+            command.extend(_cover_art_options())
+
         command.extend(["-progress", "pipe:2", "-nostats", str(output_path)])
         return command
 
@@ -554,6 +561,18 @@ def _codec_options(task: Task) -> list[str]:
     options.extend(_metadata_options(task.options))
 
     return options
+
+
+def _cover_art_options() -> list[str]:
+    return [
+        "-map", "0:a",
+        "-map", "1",
+        "-c:v", "copy",
+        "-disposition:v", "attached_pic",
+        "-metadata:s:v", "title=Album cover",
+        "-metadata:s:v", "comment=Cover (front)",
+        "-id3v2_version", "3",
+    ]
 
 
 _ID3_FIELDS = {
