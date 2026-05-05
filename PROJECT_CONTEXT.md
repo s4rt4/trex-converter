@@ -51,6 +51,10 @@ Sidebar menu:
 - OCR
 - PDF Tools
 - PDF Merge
+- Video Concat
+- Audio Mix
+- Image Montage
+- Subtitle Merge
 - Archive
 - QR / Barcode
 - Settings
@@ -123,17 +127,18 @@ Icon sudah dipakai di:
 - `app/core/queue.py`: async task queue.
 - `app/core/registry.py`: conversion registry.
 - `app/data/database.py`: SQLite task repository.
-- `app/engines/ffmpeg_engine.py`: real FFmpeg engine — video filter chain (crop → transpose → flip → scale → setpts → subtitles/ass → drawtext → reverse), audio filter chain (atempo → afade-in → afade-out → volume → vocal-remove pan → loudnorm → areverse), CRF + preset, ID3 metadata flags, channel/sample-rate, GIF builder (palettegen+paletteuse), WebP builder (libwebp+loop), thumbnail grid (select+tile), single-frame still, logo overlay via `-filter_complex` ([0:v]…[v0]; [1:v]scale,colorchannelmixer[logo]; [v0][logo]overlay[vout]).
+- `app/engines/ffmpeg_engine.py`: real FFmpeg engine — video filter chain (crop → transpose → flip → scale → setpts → subtitles/ass → drawtext → reverse), audio filter chain (atempo → afade-in → afade-out → volume → vocal-remove pan → loudnorm → areverse), CRF + preset, ID3 metadata flags, channel/sample-rate, GIF builder (palettegen+paletteuse), WebP builder (libwebp+loop), thumbnail grid (select+tile), single-frame still, logo overlay via `-filter_complex` ([0:v]…[v0]; [1:v]scale,colorchannelmixer[logo]; [v0][logo]overlay[vout]). Multi-input: `operation=concat` → concat filter complex per input ([0:v:0][0:a:0]…concat=n=N), `operation=mix` → amix filter (duration longest/shortest/first + normalize toggle).
 - `app/ui/video_options.py`: panel tabbed (Trim / Transform / Resize / Compress / Watermark / Effects / Animation / Thumbnails / Subtitles) untuk Video page. Effects = reverse + logo overlay; Animation = GIF/WebP fps/width/quality; Thumbnails = grid rows/cols/interval/tile-width; Subtitles = burn-in path picker.
 - `app/ui/audio_options.py`: panel tabbed (Trim / Effects / Output) untuk Audio page.
 - `app/ui/ocr_options.py`: panel single-pane (Language / PSM / OEM / PDF render DPI / Auto-rotate) untuk OCR page.
 - `app/ui/subtitle_options.py`: panel single-pane (Time shift) untuk Subtitle page.
 - `app/ui/settings_page.py`: Settings page dengan form output folder / concurrency / quality / DPI.
 - `app/core/settings.py`: Settings dataclass + JSON persistence + module-level cache.
-- `app/engines/subtitle_engine.py`: Python parser untuk SRT/VTT/ASS.
+- `app/engines/subtitle_engine.py`: Python parser untuk SRT/VTT/ASS, plus multi-input merge (`_collect_merged_cues`) dengan mode shift (cumulative offset + gap) atau append (sort by start), terima campuran format input.
 - `app/engines/archive_engine.py`: stdlib zip/tar extractor dengan path-safety guard.
 - `app/engines/qr_engine.py`: qrencode (generate) + zbarimg (decode) wrapper.
 - `app/ui/qr_options.py`: panel single-pane untuk QR options (size/margin/ECC).
+- `app/ui/multi_input_options.py`: panels untuk `Audio Mix` (duration + normalize), `Image Montage` (tile + geometry + background), dan `Subtitle Merge` (mode + gap).
 - `app/engines/imagemagick_engine.py`: real ImageMagick engine and image format list.
 - `app/engines/libreoffice_engine.py`: real LibreOffice engine — full Document format matrix (text/spreadsheet/presentation, 52 pairs); helper `_find_converted_file` handles arbitrary output extension.
 - `app/engines/pdf_engine.py`: real PyMuPDF engine — render to image, extract to TXT/HTML, dan operasi PDF→PDF (extract_pages/reorder/rotate/compress/repair-via-qpdf/encrypt/decrypt/strip-metadata/edit-metadata/watermark-text).
@@ -168,7 +173,7 @@ cd /home/sarta/Project/trex-converter
 Current expected result:
 
 ```text
-207 passed
+224 passed
 ```
 
 ## System Dependencies

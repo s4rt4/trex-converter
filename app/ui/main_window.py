@@ -14,6 +14,11 @@ from app.ui.conversion_page import ConversionPage, ConversionPageConfig
 from app.ui.dashboard_page import DashboardPage
 from app.ui.audio_options import AudioOptionsPanel
 from app.ui.image_options import ImageOptionsPanel
+from app.ui.multi_input_options import (
+    AudioMixOptionsPanel,
+    ImageMontageOptionsPanel,
+    SubtitleMergeOptionsPanel,
+)
 from app.ui.ocr_options import OCROptionsPanel
 from app.ui.pdf_operations import PDFOperationsPanel
 from app.ui.qr_options import QROptionsPanel
@@ -127,6 +132,49 @@ PAGE_CONFIGS = (
         force_engine=True,
         multi_input=True,
         default_options=(("operation", "merge"),),
+    ),
+    ConversionPageConfig(
+        title="Video Concat",
+        input_formats=("mp4", "mov", "mkv", "webm"),
+        default_output="mp4",
+        engine_name="ffmpeg",
+        kind="video-concat",
+        force_engine=True,
+        multi_input=True,
+        default_options=(("operation", "concat"),),
+    ),
+    ConversionPageConfig(
+        title="Audio Mix",
+        input_formats=("mp3", "wav", "aac", "flac", "m4a", "opus", "ogg"),
+        default_output="mp3",
+        engine_name="ffmpeg",
+        kind="audio-mix",
+        force_engine=True,
+        multi_input=True,
+        default_options=(("operation", "mix"),),
+        extra_options_factory=AudioMixOptionsPanel,
+    ),
+    ConversionPageConfig(
+        title="Image Montage",
+        input_formats=IMAGE_FORMATS,
+        default_output="png",
+        engine_name="imagemagick",
+        kind="image-montage",
+        force_engine=True,
+        multi_input=True,
+        default_options=(("operation", "montage"),),
+        extra_options_factory=ImageMontageOptionsPanel,
+    ),
+    ConversionPageConfig(
+        title="Subtitle Merge",
+        input_formats=("srt", "vtt", "ass"),
+        default_output="srt",
+        engine_name="subtitle",
+        kind="subtitle-merge",
+        force_engine=True,
+        multi_input=True,
+        default_options=(("operation", "merge"),),
+        extra_options_factory=SubtitleMergeOptionsPanel,
     ),
     ConversionPageConfig(
         title="Archive",
@@ -766,6 +814,10 @@ def _page_icon(kind: str):
         "document": "fa5s.file-alt",
         "pdf": "fa5s.file-pdf",
         "pdf-merge": "fa5s.copy",
+        "video-concat": "fa5s.film",
+        "audio-mix": "fa5s.compact-disc",
+        "image-montage": "fa5s.th",
+        "subtitle-merge": "fa5s.layer-group",
         "dashboard": "fa5s.chart-pie",
         "about": "fa5s.info-circle",
         "archive": "fa5s.file-archive",

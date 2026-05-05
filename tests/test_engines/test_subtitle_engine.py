@@ -340,3 +340,176 @@ async def test_engine_converts_ass_to_srt_with_time_shift(tmp_path) -> None:
     output = output_path.read_text(encoding="utf-8")
     assert "00:00:02,500 --> 00:00:05,500" in output
     assert "00:00:07,000 --> 00:00:09,750" in output
+
+
+# ---- Multi-input wave: merge ----
+
+
+SAMPLE_SRT_FIRST = """\
+1
+00:00:01,000 --> 00:00:03,000
+First A
+
+2
+00:00:04,000 --> 00:00:06,000
+First B
+"""
+
+SAMPLE_SRT_SECOND = """\
+1
+00:00:00,500 --> 00:00:02,500
+Second A
+
+2
+00:00:03,000 --> 00:00:05,000
+Second B
+"""
+
+
+@pytest.mark.asyncio
+async def test_engine_merge_shift_mode_chains_files_sequentially(tmp_path) -> None:
+    a = tmp_path / "a.srt"
+    b = tmp_path / "b.srt"
+    a.write_text(SAMPLE_SRT_FIRST, encoding="utf-8")
+    b.write_text(SAMPLE_SRT_SECOND, encoding="utf-8")
+    out = tmp_path / "merged.srt"
+
+    task = Task(
+        input_path=a,
+        output_path=out,
+        format_in="srt",
+        format_out="srt",
+        engine="subtitle",
+        options={"operation": "merge"},
+        extra_inputs=[b],
+    )
+
+    await SubtitleEngine().convert(task)
+
+    output = out.read_text(encoding="utf-8")
+    # First file unchanged
+    assert "00:00:01,000 --> 00:00:03,000" in output
+    assert "00:00:04,000 --> 00:00:06,000" in output
+    # Second file shifted by first file's max end (6.0s) + gap (0)
+    assert "00:00:06,500 --> 00:00:08,500" in output
+    assert "00:00:09,000 --> 00:00:11,000" in output
+
+
+@pytest.mark.asyncio
+async def test_engine_merge_shift_mode_respects_gap(tmp_path) -> None:
+    a = tmp_path / "a.srt"
+    b = tmp_path / "b.srt"
+    a.write_text(SAMPLE_SRT_FIRST, encoding="utf-8")
+    b.write_text(SAMPLE_SRT_SECOND, encoding="utf-8")
+
+    task = Task(
+        input_path=a,
+        output_path=tmp_path / "out.srt",
+        format_in="srt",
+        format_out="srt",
+        engine="subtitle",
+        options={"operation": "merge", "subtitle_merge_gap": 1.5},
+        extra_inputs=[b],
+    )
+
+    await SubtitleEngine().convert(task)
+
+    output = (tmp_path / "out.srt").read_text(encoding="utf-8")
+    # Second file shifted by 6.0 + 1.5 = 7.5s
+    assert "00:00:08,000 --> 00:00:10,000" in output
+
+
+@pytest.mark.asyncio
+async def test_engine_merge_append_mode_sorts_by_start_time(tmp_path) -> None:
+    a = tmp_path / "a.srt"
+    b = tmp_path / "b.srt"
+    a.write_text(SAMPLE_SRT_FIRST, encoding="utf-8")
+    b.write_text(SAMPLE_SRT_SECOND, encoding="utf-8")
+    out = tmp_path / "merged.srt"
+
+    task = Task(
+        input_path=a,
+        output_path=out,
+        format_in="srt",
+        format_out="srt",
+        engine="subtitle",
+        options={"operation": "merge", "subtitle_merge_mode": "append"},
+        extra_inputs=[b],
+    )
+
+    await SubtitleEngine().convert(task)
+
+    text = out.read_text(encoding="utf-8")
+    # All four cues are present, sorted by start time:
+    # 0.5s (Second A), 1.0s (First A), 3.0s (Second B), 4.0s (First B)
+    pos_first_a = text.index("First A")
+    pos_first_b = text.index("First B")
+    pos_second_a = text.index("Second A")
+    pos_second_b = text.index("Second B")
+    assert pos_second_a < pos_first_a < pos_second_b < pos_first_b
+
+
+@pytest.mark.asyncio
+async def test_engine_merge_handles_mixed_input_formats(tmp_path) -> None:
+    a = tmp_path / "a.srt"
+    b = tmp_path / "b.vtt"
+    a.write_text(SAMPLE_SRT, encoding="utf-8")
+    b.write_text(SAMPLE_VTT, encoding="utf-8")
+    out = tmp_path / "merged.ass"
+
+    task = Task(
+        input_path=a,
+        output_path=out,
+        format_in="srt",
+        format_out="ass",
+        engine="subtitle",
+        options={"operation": "merge"},
+        extra_inputs=[b],
+    )
+
+    await SubtitleEngine().convert(task)
+
+    output = out.read_text(encoding="utf-8")
+    assert "[Events]" in output
+    # First file's cues (1-4s and 5.5-8.25s), then second file's cues shifted by 8.25s
+    # Second file's 1.0s cue becomes 9.25s -> "0:00:09.25"
+    assert "0:00:09.25" in output
+
+
+@pytest.mark.asyncio
+async def test_engine_merge_requires_at_least_two_inputs(tmp_path) -> None:
+    a = tmp_path / "a.srt"
+    a.write_text(SAMPLE_SRT, encoding="utf-8")
+
+    task = Task(
+        input_path=a,
+        output_path=tmp_path / "out.srt",
+        format_in="srt",
+        format_out="srt",
+        engine="subtitle",
+        options={"operation": "merge"},
+    )
+
+    with pytest.raises(RuntimeError, match="at least two"):
+        await SubtitleEngine().convert(task)
+
+
+@pytest.mark.asyncio
+async def test_engine_merge_rejects_unknown_mode(tmp_path) -> None:
+    a = tmp_path / "a.srt"
+    b = tmp_path / "b.srt"
+    a.write_text(SAMPLE_SRT_FIRST, encoding="utf-8")
+    b.write_text(SAMPLE_SRT_SECOND, encoding="utf-8")
+
+    task = Task(
+        input_path=a,
+        output_path=tmp_path / "out.srt",
+        format_in="srt",
+        format_out="srt",
+        engine="subtitle",
+        options={"operation": "merge", "subtitle_merge_mode": "weird"},
+        extra_inputs=[b],
+    )
+
+    with pytest.raises(RuntimeError, match="subtitle_merge_mode"):
+        await SubtitleEngine().convert(task)

@@ -97,6 +97,12 @@ class ImageMagickEngine(BaseEngine):
         return self._capabilities
 
     def _build_command(self, task: Task) -> list[str]:
+        operation = str(task.options.get("operation") or "").lower()
+        if operation == "montage":
+            return _build_montage_command(task)
+        return self._build_single_command(task)
+
+    def _build_single_command(self, task: Task) -> list[str]:
         binary = _imagemagick_binary()
         options = task.options
         command: list[str] = [binary]
@@ -203,6 +209,61 @@ def _imagemagick_binary() -> str:
     if which("magick"):
         return "magick"
     return "convert"
+
+
+_MONTAGE_TILE_RE = None  # populated below to avoid moving the import
+
+
+def _build_montage_command(task: Task) -> list[str]:
+    import re as _re
+
+    sources = list(task.inputs)
+    if len(sources) < 2:
+        raise RuntimeError("Montage requires at least two input images")
+
+    options = task.options
+    binary = _imagemagick_binary()
+    if binary == "magick":
+        command = ["magick", "montage"]
+    else:
+        command = ["montage"]
+
+    for source in sources:
+        command.append(str(source))
+
+    tile = str(options.get("montage_tile") or "auto").lower()
+    if tile == "auto":
+        tile = _auto_tile(len(sources))
+    if not _re.match(r"^\d+x\d+$", tile):
+        raise RuntimeError(f"montage_tile must look like '3x3', got {options.get('montage_tile')}")
+    command.extend(["-tile", tile])
+
+    geometry = str(options.get("montage_geometry") or "200x200+5+5")
+    if not _re.match(r"^\d+x\d+(?:[+]\d+[+]\d+)?$", geometry):
+        raise RuntimeError(
+            f"montage_geometry must look like '200x200+5+5', got {options.get('montage_geometry')}"
+        )
+    command.extend(["-geometry", geometry])
+
+    background = str(options.get("montage_background") or "white")
+    command.extend(["-background", background])
+
+    label = options.get("montage_label")
+    if label:
+        command.extend(["-label", str(label)])
+
+    command.append(str(task.output_path))
+    return command
+
+
+def _auto_tile(count: int) -> str:
+    import math
+
+    if count <= 1:
+        return "1x1"
+    cols = int(math.ceil(math.sqrt(count)))
+    rows = int(math.ceil(count / cols))
+    return f"{cols}x{rows}"
 
 
 def _resolve_resize(options: dict) -> str | None:

@@ -142,6 +142,12 @@ class FFmpegEngine(BaseEngine):
         fmt_out = task.format_out.lower()
         options = task.options
 
+        operation = str(options.get("operation") or "").lower()
+        if operation == "concat":
+            return _build_concat_command(task, output_path)
+        if operation == "mix":
+            return _build_mix_command(task, output_path)
+
         if fmt_out == "gif":
             return _build_gif_command(task, output_path)
 
@@ -375,6 +381,68 @@ def _logo_filter_complex(options: dict) -> str:
     parts.append(f"{v_in}[logo]overlay={GRAVITY_OVERLAY_POS[gravity]}[vout]")
 
     return ";".join(parts)
+
+
+def _build_concat_command(task: Task, output_path: Path) -> list[str]:
+    sources = list(task.inputs)
+    if len(sources) < 2:
+        raise RuntimeError("Concat requires at least two input files")
+
+    fmt_out = task.format_out.lower()
+    is_audio_only = fmt_out in AUDIO_OUTPUT_FORMATS
+    n = len(sources)
+
+    command = ["ffmpeg", "-y"]
+    for source in sources:
+        command.extend(["-i", str(source)])
+
+    if is_audio_only:
+        labels = "".join(f"[{i}:a:0]" for i in range(n))
+        filter_complex = f"{labels}concat=n={n}:v=0:a=1[outa]"
+        command.extend(["-filter_complex", filter_complex])
+        command.extend(["-map", "[outa]"])
+    else:
+        labels = "".join(f"[{i}:v:0][{i}:a:0]" for i in range(n))
+        filter_complex = f"{labels}concat=n={n}:v=1:a=1[outv][outa]"
+        command.extend(["-filter_complex", filter_complex])
+        command.extend(["-map", "[outv]", "-map", "[outa]"])
+
+    command.extend(_codec_options(task))
+    command.extend(["-progress", "pipe:2", "-nostats", str(output_path)])
+    return command
+
+
+_MIX_DURATIONS = {"longest", "shortest", "first"}
+
+
+def _build_mix_command(task: Task, output_path: Path) -> list[str]:
+    sources = list(task.inputs)
+    if len(sources) < 2:
+        raise RuntimeError("Mix requires at least two input files")
+
+    duration = str(task.options.get("mix_duration") or "longest").lower()
+    if duration not in _MIX_DURATIONS:
+        raise RuntimeError(
+            f"mix_duration must be one of {sorted(_MIX_DURATIONS)}, got {duration}"
+        )
+    normalize = task.options.get("mix_normalize")
+    if normalize is None:
+        normalize = True
+
+    n = len(sources)
+    command = ["ffmpeg", "-y"]
+    for source in sources:
+        command.extend(["-i", str(source)])
+
+    labels = "".join(f"[{i}:a:0]" for i in range(n))
+    chain = f"amix=inputs={n}:duration={duration}:normalize={1 if normalize else 0}"
+    filter_complex = f"{labels}{chain}[outa]"
+    command.extend(["-filter_complex", filter_complex])
+    command.extend(["-map", "[outa]"])
+
+    command.extend(_codec_options(task))
+    command.extend(["-progress", "pipe:2", "-nostats", str(output_path)])
+    return command
 
 
 def _build_gif_command(task: Task, output_path: Path) -> list[str]:

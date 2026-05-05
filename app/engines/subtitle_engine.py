@@ -69,20 +69,17 @@ class SubtitleEngine(BaseEngine):
         )
 
     async def convert(self, task: Task) -> None:
-        input_text = Path(task.input_path).read_text(encoding="utf-8-sig")
-
-        format_in = task.format_in.lower()
         format_out = task.format_out.lower()
-
-        parsers = {"srt": parse_srt, "vtt": parse_vtt, "ass": parse_ass}
         formatters = {"srt": format_srt, "vtt": format_vtt, "ass": format_ass}
-
-        if format_in not in parsers:
-            raise RuntimeError(f"Unsupported subtitle input: {task.format_in}")
         if format_out not in formatters:
             raise RuntimeError(f"Unsupported subtitle output: {task.format_out}")
 
-        cues = parsers[format_in](input_text)
+        operation = str(task.options.get("operation") or "").lower()
+        if operation == "merge" or task.extra_inputs:
+            cues = _collect_merged_cues(task)
+        else:
+            cues = _parse_input_cues(task.input_path, task.format_in)
+
         if not cues:
             raise RuntimeError("No subtitle cues found in input file")
 
@@ -114,6 +111,53 @@ class SubtitleEngine(BaseEngine):
     @property
     def capabilities(self) -> EngineCapabilities:
         return self._capabilities
+
+
+def _parse_input_cues(input_path: Path, format_in: str) -> list[Cue]:
+    text = Path(input_path).read_text(encoding="utf-8-sig")
+    parsers = {"srt": parse_srt, "vtt": parse_vtt, "ass": parse_ass}
+    parser = parsers.get(format_in.lower())
+    if parser is None:
+        raise RuntimeError(f"Unsupported subtitle input: {format_in}")
+    return parser(text)
+
+
+def _collect_merged_cues(task: Task) -> list[Cue]:
+    sources = list(task.inputs)
+    if len(sources) < 2:
+        raise RuntimeError("Subtitle merge requires at least two input files")
+
+    mode = str(task.options.get("subtitle_merge_mode") or "shift").lower()
+    if mode not in {"append", "shift"}:
+        raise RuntimeError("subtitle_merge_mode must be 'append' or 'shift'")
+    gap = _float_option(task.options.get("subtitle_merge_gap")) or 0.0
+    gap = max(0.0, gap)
+
+    formats = task.formats_in
+    cumulative_offset = 0.0
+    merged: list[Cue] = []
+    for index, source in enumerate(sources):
+        chunk = _parse_input_cues(source, formats[index])
+        if not chunk:
+            continue
+        if mode == "shift" and cumulative_offset > 0:
+            chunk = [
+                Cue(
+                    start_seconds=cue.start_seconds + cumulative_offset,
+                    end_seconds=cue.end_seconds + cumulative_offset,
+                    text=cue.text,
+                )
+                for cue in chunk
+            ]
+        merged.extend(chunk)
+        if mode == "shift":
+            chunk_end = max((cue.end_seconds for cue in chunk), default=0.0)
+            cumulative_offset = chunk_end + gap
+        task.append_log(f"Merged {len(chunk)} cue(s) from {source.name}")
+
+    if mode == "append":
+        merged.sort(key=lambda cue: cue.start_seconds)
+    return merged
 
 
 def parse_srt(text: str) -> list[Cue]:

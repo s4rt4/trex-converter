@@ -47,6 +47,25 @@ def _build(options: dict, *, format_in: str = "mp4", format_out: str = "mp4") ->
     return FFmpegEngine()._build_command(task)
 
 
+def _build_multi(
+    options: dict,
+    inputs: list[Path],
+    *,
+    format_in: str,
+    format_out: str,
+) -> list[str]:
+    task = Task(
+        input_path=inputs[0],
+        output_path=Path("out." + format_out),
+        format_in=format_in,
+        format_out=format_out,
+        engine="ffmpeg",
+        options=options,
+        extra_inputs=inputs[1:],
+    )
+    return FFmpegEngine()._build_command(task)
+
+
 def test_supports_video_to_video_and_extract() -> None:
     engine = FFmpegEngine()
 
@@ -693,3 +712,86 @@ def test_audio_output_skips_video_filters_but_keeps_audio_filters() -> None:
     af = command[command.index("-af") + 1]
     assert "volume=" in af
     assert "afade=t=in" in af
+
+
+# ---- Multi-input wave: concat + mix ----
+
+
+def test_video_concat_uses_concat_filter_complex_with_video_audio() -> None:
+    command = _build_multi(
+        {"operation": "concat"},
+        [Path("a.mp4"), Path("b.mp4"), Path("c.mp4")],
+        format_in="mp4",
+        format_out="mp4",
+    )
+
+    inputs = [command[i + 1] for i, arg in enumerate(command) if arg == "-i"]
+    assert inputs == ["a.mp4", "b.mp4", "c.mp4"]
+    fc = command[command.index("-filter_complex") + 1]
+    assert "concat=n=3:v=1:a=1" in fc
+    assert "[0:v:0][0:a:0][1:v:0][1:a:0][2:v:0][2:a:0]" in fc
+    map_args = [command[i + 1] for i, arg in enumerate(command) if arg == "-map"]
+    assert "[outv]" in map_args
+    assert "[outa]" in map_args
+
+
+def test_audio_only_concat_uses_audio_only_filter() -> None:
+    command = _build_multi(
+        {"operation": "concat"},
+        [Path("a.mp3"), Path("b.mp3")],
+        format_in="mp3",
+        format_out="mp3",
+    )
+
+    fc = command[command.index("-filter_complex") + 1]
+    assert "concat=n=2:v=0:a=1" in fc
+    assert "[0:a:0][1:a:0]" in fc
+    map_args = [command[i + 1] for i, arg in enumerate(command) if arg == "-map"]
+    assert "[outa]" in map_args
+    assert "[outv]" not in map_args
+
+
+def test_concat_requires_at_least_two_inputs() -> None:
+    with pytest.raises(RuntimeError, match="at least two"):
+        _build_multi(
+            {"operation": "concat"},
+            [Path("only.mp4")],
+            format_in="mp4",
+            format_out="mp4",
+        )
+
+
+def test_audio_mix_uses_amix_filter_with_default_longest_duration() -> None:
+    command = _build_multi(
+        {"operation": "mix"},
+        [Path("a.mp3"), Path("b.mp3"), Path("c.mp3")],
+        format_in="mp3",
+        format_out="mp3",
+    )
+
+    fc = command[command.index("-filter_complex") + 1]
+    assert "amix=inputs=3:duration=longest:normalize=1" in fc
+    assert "[0:a:0][1:a:0][2:a:0]" in fc
+
+
+def test_audio_mix_duration_override_and_disable_normalize() -> None:
+    command = _build_multi(
+        {"operation": "mix", "mix_duration": "shortest", "mix_normalize": False},
+        [Path("a.mp3"), Path("b.mp3")],
+        format_in="mp3",
+        format_out="mp3",
+    )
+
+    fc = command[command.index("-filter_complex") + 1]
+    assert "duration=shortest" in fc
+    assert "normalize=0" in fc
+
+
+def test_audio_mix_invalid_duration_raises() -> None:
+    with pytest.raises(RuntimeError, match="mix_duration"):
+        _build_multi(
+            {"operation": "mix", "mix_duration": "average"},
+            [Path("a.mp3"), Path("b.mp3")],
+            format_in="mp3",
+            format_out="mp3",
+        )

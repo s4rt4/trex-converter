@@ -186,3 +186,77 @@ def test_unset_options_produce_minimal_command() -> None:
         "input.png",
         "output.webp",
     ]
+
+
+# ---- Multi-input wave: montage ----
+
+
+def _build_montage(options: dict, inputs: list[Path]) -> list[str]:
+    task = Task(
+        input_path=inputs[0],
+        output_path=Path("out.png"),
+        format_in="png",
+        format_out="png",
+        engine="imagemagick",
+        options={**options, "operation": "montage"},
+        extra_inputs=inputs[1:],
+    )
+    return ImageMagickEngine()._build_command(task)
+
+
+def test_montage_uses_montage_subcommand_with_all_inputs() -> None:
+    command = _build_montage(
+        {},
+        [Path("a.png"), Path("b.png"), Path("c.png"), Path("d.png")],
+    )
+
+    # binary may be either `magick montage` (v7) or `montage` (v6)
+    assert command[0] in {"magick", "montage"}
+    if command[0] == "magick":
+        assert command[1] == "montage"
+        body = command[2:]
+    else:
+        body = command[1:]
+
+    # First N args are inputs in order
+    assert body[:4] == ["a.png", "b.png", "c.png", "d.png"]
+    # Tile auto -> 2x2 for 4 inputs
+    assert "-tile" in body
+    assert body[body.index("-tile") + 1] == "2x2"
+    assert command[-1] == "out.png"
+
+
+def test_montage_explicit_tile_geometry_and_background() -> None:
+    command = _build_montage(
+        {
+            "montage_tile": "3x2",
+            "montage_geometry": "150x150+10+10",
+            "montage_background": "#0c2c55",
+        },
+        [Path("a.png"), Path("b.png")],
+    )
+
+    assert command[command.index("-tile") + 1] == "3x2"
+    assert command[command.index("-geometry") + 1] == "150x150+10+10"
+    assert command[command.index("-background") + 1] == "#0c2c55"
+
+
+def test_montage_requires_at_least_two_inputs() -> None:
+    with pytest.raises(RuntimeError, match="at least two"):
+        _build_montage({}, [Path("only.png")])
+
+
+def test_montage_invalid_tile_raises() -> None:
+    with pytest.raises(RuntimeError, match="montage_tile"):
+        _build_montage(
+            {"montage_tile": "garbage"},
+            [Path("a.png"), Path("b.png")],
+        )
+
+
+def test_montage_invalid_geometry_raises() -> None:
+    with pytest.raises(RuntimeError, match="montage_geometry"):
+        _build_montage(
+            {"montage_geometry": "not-geometry"},
+            [Path("a.png"), Path("b.png")],
+        )

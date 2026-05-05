@@ -436,6 +436,14 @@ class ConversionPage(QWidget):
             return output in {*IMAGE_FORMATS, "txt", "pdf", "html"}
         if self.config.kind == "pdf-merge":
             return output == "pdf"
+        if self.config.kind == "video-concat":
+            return output in {"mp4", "mov", "mkv", "webm"}
+        if self.config.kind == "audio-mix":
+            return output in {"mp3", "wav", "aac", "flac", "m4a", "opus", "ogg"}
+        if self.config.kind == "image-montage":
+            return output in set(IMAGE_FORMATS)
+        if self.config.kind == "subtitle-merge":
+            return output in {"srt", "vtt", "ass"}
         if self.config.kind == "ocr":
             return output in {"txt", "pdf", "hocr", "tsv"}
         if self.config.kind == "subtitle":
