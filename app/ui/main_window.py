@@ -30,7 +30,7 @@ from app.ui.svg_options import SVGOptionsPanel
 from app.ui.settings_page import SettingsPage
 from app.ui.subtitle_options import SubtitleOptionsPanel
 from app.ui.video_options import VideoOptionsPanel
-from app.ui.icons import ICON_SIZE, accent_icon, app_icon, icon, surface_icon
+from app.ui.icons import ICON_SIZE, SIDEBAR_ICON_SIZE, accent_icon, app_icon, icon, nav_icon, surface_icon
 from app.ui.theme import (
     BRAND_ACCENT,
     BRAND_DARK,
@@ -43,7 +43,7 @@ from app.ui.theme import (
 from app.utils.paths import asset_path
 
 try:
-    from PySide6.QtCore import QTimer
+    from PySide6.QtCore import Qt, QTimer
     from PySide6.QtGui import QPixmap
     from PySide6.QtWidgets import (
         QFrame,
@@ -359,7 +359,7 @@ class MainWindow(QMainWindow):
     def _build_sidebar(self) -> QWidget:
         sidebar = QFrame(self)
         sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(204)
+        sidebar.setFixedWidth(232)
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(12, 16, 12, 12)
         layout.setSpacing(12)
@@ -368,6 +368,9 @@ class MainWindow(QMainWindow):
 
         self.nav = QListWidget(sidebar)
         self.nav.setObjectName("SidebarNav")
+        self.nav.setIconSize(SIDEBAR_ICON_SIZE)
+        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.nav.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         self.nav.addItem(QListWidgetItem(_page_icon("dashboard"), "Dashboard"))
         for config in PAGE_CONFIGS:
             self.nav.addItem(QListWidgetItem(_page_icon(config.kind), config.title))
@@ -644,8 +647,7 @@ class MainWindow(QMainWindow):
             #PDFNumberingOptionsPanel,
             #SlidesToImagesOptionsPanel,
             #DocumentOptionsPanel,
-            #QROptionsPanel,
-            #SVGOptionsPanel {
+            #QROptionsPanel {
                 background: $BRAND_SURFACE_SOFT;
                 border: 1px solid rgba(86, 182, 198, 145);
                 border-radius: 8px;
@@ -653,7 +655,8 @@ class MainWindow(QMainWindow):
             #ImageOptionsTabs::pane,
             #PDFOperationsTabs::pane,
             #VideoOptionsTabs::pane,
-            #AudioOptionsTabs::pane {
+            #AudioOptionsTabs::pane,
+            #SVGOptionsTabs::pane {
                 background: $BRAND_SURFACE_SOFT;
                 border: 1px solid rgba(86, 182, 198, 145);
                 border-radius: 8px;
@@ -662,14 +665,16 @@ class MainWindow(QMainWindow):
             #ImageOptionsTabs QTabBar,
             #PDFOperationsTabs QTabBar,
             #VideoOptionsTabs QTabBar,
-            #AudioOptionsTabs QTabBar {
+            #AudioOptionsTabs QTabBar,
+            #SVGOptionsTabs QTabBar {
                 background: transparent;
                 border: 0;
             }
             #ImageOptionsTabs QTabBar::tab,
             #PDFOperationsTabs QTabBar::tab,
             #VideoOptionsTabs QTabBar::tab,
-            #AudioOptionsTabs QTabBar::tab {
+            #AudioOptionsTabs QTabBar::tab,
+            #SVGOptionsTabs QTabBar::tab {
                 background: rgba(228, 215, 189, 150);
                 color: $BRAND_DARK;
                 border: 1px solid rgba(86, 182, 198, 145);
@@ -681,7 +686,8 @@ class MainWindow(QMainWindow):
             #ImageOptionsTabs QTabBar::tab:selected,
             #PDFOperationsTabs QTabBar::tab:selected,
             #VideoOptionsTabs QTabBar::tab:selected,
-            #AudioOptionsTabs QTabBar::tab:selected {
+            #AudioOptionsTabs QTabBar::tab:selected,
+            #SVGOptionsTabs QTabBar::tab:selected {
                 background: $BRAND_DARK;
                 color: $BRAND_ACCENT;
                 border: 1px solid $BRAND_DARK;
@@ -689,13 +695,15 @@ class MainWindow(QMainWindow):
             #ImageOptionsTabs QTabBar::tab:hover:!selected,
             #PDFOperationsTabs QTabBar::tab:hover:!selected,
             #VideoOptionsTabs QTabBar::tab:hover:!selected,
-            #AudioOptionsTabs QTabBar::tab:hover:!selected {
+            #AudioOptionsTabs QTabBar::tab:hover:!selected,
+            #SVGOptionsTabs QTabBar::tab:hover:!selected {
                 background: $BRAND_SURFACE_SOFT;
             }
             #ImageOptionsPanel QWidget,
             #PDFOperationsPanel QWidget,
             #VideoOptionsPanel QWidget,
             #AudioOptionsPanel QWidget,
+            #SVGOptionsPanel QWidget,
             #OCROptionsPanel,
             #OCROptionsPanel QWidget,
             #SubtitleOptionsPanel,
@@ -970,4 +978,4 @@ def _page_icon(kind: str):
         "qr": "fa5s.qrcode",
         "svg": "fa5s.bezier-curve",
     }
-    return surface_icon(icons.get(kind, "fa5s.file"))
+    return nav_icon(icons.get(kind, "fa5s.file"))

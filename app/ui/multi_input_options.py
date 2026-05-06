@@ -408,3 +408,8 @@ def _field(text: str, parent: QWidget) -> QLabel:
     label = QLabel(text, parent)
     label.setObjectName("FieldLabel")
     return label
+
+
+def _use_stepper(spinbox: QAbstractSpinBox) -> None:
+    spinbox.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+    spinbox.setAccelerated(True)

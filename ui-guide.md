@@ -32,22 +32,20 @@ Aturan pemakaian:
 
 ## Sidebar
 
-Sidebar saat ini berisi:
-
-- Dashboard
-- Image
-- Video
-- Document
-- PDF Tools
-- About
+Sidebar saat ini berisi banyak entri (Dashboard, Image, Video, Audio, Document, Subtitle, OCR, PDF Tools, PDF Merge, PDF Split, PDF Numbering, PDF Extract Images, PDF Extract Attachments, Document Merge, Slides to Images, Video Concat, Audio Mix, Image Montage, Subtitle Merge, Archive, Archive Compress, QR / Barcode, SVG / Vector, Settings, About).
 
 Panduan:
 
-- Width sekitar `204px`.
+- Width `232px` — cukup lebar agar entri terpanjang muat penuh tanpa horizontal scrollbar. Disable horizontal scrollbar dengan `setHorizontalScrollBarPolicy(ScrollBarAlwaysOff)`.
 - Logo tetap kecil, teks `T-Rex Converter` jangan terlalu dominan.
-- Active item memakai highlight halus dan indikator kiri cyan.
+- **Icon size sidebar = `SIDEBAR_ICON_SIZE` (22×22)** — sedikit lebih besar dari `ICON_SIZE` form (18×18) supaya navigasi lebih mudah dipindai.
+- **Icon mengikuti warna teks per state**:
+  - Default (non-aktif/hover): warna `BRAND_SURFACE` (cream).
+  - Active/selected: warna `BRAND_ACCENT` (cyan) — sama dengan warna teks selected, supaya icon dan teks satu kesatuan visual.
+  - Implementasi via helper `nav_icon(name)` di `app/ui/icons.py` yang pass `color_selected=BRAND_ACCENT` ke `qtawesome.icon`. **Jangan** pakai `surface_icon` untuk sidebar — itu icon-nya tidak ikut highlight.
+- Active item memakai highlight halus + indikator kiri cyan + icon cyan + teks cyan.
 - Dependency check hanya icon kecil di pojok bawah sidebar, bukan tombol besar.
-- Gunakan `qtawesome` melalui helper `app/ui/icons.py`.
+- Gunakan `qtawesome` melalui helper `app/ui/icons.py` (`nav_icon` untuk sidebar, `accent_icon`/`surface_icon` untuk button form).
 
 ## Page Structure
 
