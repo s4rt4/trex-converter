@@ -500,7 +500,7 @@ class ConversionPage(QWidget):
         if self.config.kind == "qr":
             return output in {"png", "svg", "txt"}
         if self.config.kind == "svg":
-            return output in {"png", "pdf", "svg", "eps", "ps", "emf", "wmf"}
+            return output in {"png", "pdf", "svg", "eps", "ps", "emf", "wmf", "dxf"}
         return True
 
 

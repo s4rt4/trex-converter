@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import tempfile
 from pathlib import Path
 
 from app.core.task import Task
 from app.engines.base import BaseEngine, EngineCapabilities
+from app.engines.imagemagick_engine import _imagemagick_binary
 
 
-SUPPORTED_PAIRS = {
+BITMAP_TRACE_FORMATS = ("png", "jpg", "jpeg", "bmp", "tif", "tiff", "gif", "webp")
+TRACE_PAIRS = {(fmt, "svg") for fmt in BITMAP_TRACE_FORMATS}
+
+INKSCAPE_PAIRS = {
     ("svg", "png"),
     ("svg", "pdf"),
     ("svg", "svg"),
@@ -15,12 +20,21 @@ SUPPORTED_PAIRS = {
     ("svg", "ps"),
     ("svg", "emf"),
     ("svg", "wmf"),
+    ("svg", "dxf"),
     ("pdf", "svg"),
+    ("dxf", "svg"),
 }
+
+SUPPORTED_PAIRS = INKSCAPE_PAIRS | TRACE_PAIRS
 
 SVG_SVG_OPERATIONS = {"trim", "cleanup"}
 PS_LEVELS = {2, 3}
 TEXT_TO_PATH_FORMATS = {"pdf", "eps", "ps", "svg"}
+
+DXF_EXTENSIONS = {
+    "r14": "org.ekips.output.dxf_outlines",
+    "r12": "org.inkscape.output.dxf_twelve",
+}
 
 
 class InkscapeEngine(BaseEngine):
@@ -31,6 +45,7 @@ class InkscapeEngine(BaseEngine):
             supports_progress=False,
             supports_cancel=True,
             requires_binary="inkscape",
+            extra_binaries=("potrace", "magick"),
         )
         self._processes: dict[str, asyncio.subprocess.Process] = {}
 
@@ -44,12 +59,17 @@ class InkscapeEngine(BaseEngine):
         output_path = Path(task.output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        command = build_command(task)
-        task.append_log("Running: " + " ".join(command))
-        await self._run(command, task)
+        if pair in TRACE_PAIRS:
+            await self._run_trace(task)
+        else:
+            command = build_command(task)
+            task.append_log("Running: " + " ".join(command))
+            await self._run(command, task, "inkscape")
 
         if not output_path.exists():
-            raise RuntimeError(f"Inkscape did not produce expected output: {output_path}")
+            raise RuntimeError(
+                f"Conversion did not produce expected output: {output_path}"
+            )
 
         task.append_log(f"Wrote: {output_path}")
         task.progress = 1.0
@@ -72,7 +92,21 @@ class InkscapeEngine(BaseEngine):
     def capabilities(self) -> EngineCapabilities:
         return self._capabilities
 
-    async def _run(self, command: list[str], task: Task) -> None:
+    async def _run_trace(self, task: Task) -> None:
+        input_path = Path(task.input_path)
+        output_path = Path(task.output_path)
+
+        with tempfile.TemporaryDirectory(prefix="trex-trace-") as tmpdir:
+            pgm_path = Path(tmpdir) / "input.pgm"
+            magick_cmd = _build_magick_pgm_command(input_path, pgm_path)
+            task.append_log("Running: " + " ".join(magick_cmd))
+            await self._run(magick_cmd, task, "magick")
+
+            potrace_cmd = build_potrace_command(task, pgm_path, output_path)
+            task.append_log("Running: " + " ".join(potrace_cmd))
+            await self._run(potrace_cmd, task, "potrace")
+
+    async def _run(self, command: list[str], task: Task, label: str) -> None:
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=asyncio.subprocess.PIPE,
@@ -90,7 +124,7 @@ class InkscapeEngine(BaseEngine):
         if process.returncode != 0:
             stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip()
             raise RuntimeError(
-                f"inkscape exited with code {process.returncode}: {stderr_text}"
+                f"{label} exited with code {process.returncode}: {stderr_text}"
             )
 
 
@@ -101,7 +135,7 @@ def build_command(task: Task) -> list[str]:
     input_path = Path(task.input_path)
     output_path = Path(task.output_path)
 
-    if (format_in, format_out) not in SUPPORTED_PAIRS:
+    if (format_in, format_out) not in INKSCAPE_PAIRS:
         raise RuntimeError(
             f"Unsupported Inkscape pair: {format_in} -> {format_out}"
         )
@@ -111,7 +145,19 @@ def build_command(task: Task) -> list[str]:
         f"--export-filename={output_path}",
     ]
 
-    if format_in == "pdf" and format_out == "svg":
+    if format_out == "dxf":
+        # Extension-based export: --export-type is omitted, the extension drives output.
+        dxf_format = str(options.get("inkscape_dxf_format") or "r14").lower()
+        if dxf_format not in DXF_EXTENSIONS:
+            raise RuntimeError(
+                f"inkscape_dxf_format must be one of "
+                f"{sorted(DXF_EXTENSIONS)}, got {dxf_format}"
+            )
+        command.append(f"--export-extension={DXF_EXTENSIONS[dxf_format]}")
+    elif format_in == "dxf" and format_out == "svg":
+        command.append("--export-type=svg")
+        command.append("--export-plain-svg")
+    elif format_in == "pdf" and format_out == "svg":
         command.append("--export-type=svg")
         command.append("--export-plain-svg")
         command.extend(_pdf_page_args(options))
@@ -153,6 +199,52 @@ def build_command(task: Task) -> list[str]:
 
     command.append(str(input_path))
     return command
+
+
+def build_potrace_command(
+    task: Task, pgm_path: Path, output_path: Path
+) -> list[str]:
+    options = task.options
+    command = ["potrace", str(pgm_path), "-s", "-o", str(output_path)]
+
+    threshold = options.get("trace_threshold")
+    if threshold is not None and threshold != "":
+        try:
+            value = float(threshold)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"trace_threshold must be a number, got {threshold!r}"
+            ) from exc
+        if not 0.0 <= value <= 1.0:
+            raise RuntimeError(
+                f"trace_threshold must be between 0 and 1, got {value}"
+            )
+        command.extend(["-k", f"{value:g}"])
+
+    turdsize = _int_option(options.get("trace_turdsize"))
+    if turdsize is not None:
+        if turdsize < 0:
+            raise RuntimeError(f"trace_turdsize must be >= 0, got {turdsize}")
+        command.extend(["-t", str(turdsize)])
+
+    alphamax = options.get("trace_alphamax")
+    if alphamax is not None and alphamax != "":
+        try:
+            value = float(alphamax)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"trace_alphamax must be a number, got {alphamax!r}"
+            ) from exc
+        if value < 0.0:
+            raise RuntimeError(f"trace_alphamax must be >= 0, got {value}")
+        command.extend(["-a", f"{value:g}"])
+
+    return command
+
+
+def _build_magick_pgm_command(input_path: Path, pgm_path: Path) -> list[str]:
+    binary = _imagemagick_binary()
+    return [binary, str(input_path), "-colorspace", "Gray", str(pgm_path)]
 
 
 def _raster_size_args(options: dict) -> list[str]:

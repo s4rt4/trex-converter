@@ -29,7 +29,7 @@ Sudah ada:
 - Subtitle engine Python-pure: SRT ↔ VTT ↔ ASS round-trip dengan time shift. ASS parser handle Format header detection, Dialogue rows dengan koma di text, `\N` escape, Comment skip. ASS formatter emit Script Info + V4+ Styles + Events dengan default Arial 32 white style. Engine `requires_binary=""` di-allow oleh DependencyChecker.
 - Archive engine Python-pure (stdlib `zipfile` + `tarfile`): extract zip/tar/tgz/tbz/txz/gz/bz2/xz → folder (reject absolute path dan path-traversal entries; tar extract pakai `filter='data'`). Plus compress folder → zip/tar/tgz/tbz/txz (ZIP_DEFLATED / tar mode w/w:gz/w:bz2/w:xz, file-only entries via Path.rglob, POSIX relative arcnames).
 - QR engine: `qrencode` (generate txt → png/svg dengan size/margin/ECC L-M-Q-H) + `zbarimg` (decode image → txt, exit 4 = no barcode). Engine declare `requires_binary="qrencode"` + `extra_binaries=("zbarimg",)`.
-- Inkscape engine (SVG / Vector Tools, Wave 1 + 2 + 3-partial): pair `svg→png` (dpi / width / height), `svg→pdf` (vector preserved), `svg→svg` dengan operation `cleanup` (`--export-plain-svg --vacuum-defs`) atau `trim` (cleanup + `--export-area-drawing`). Wave 2: `svg→eps`, `svg→ps` dengan opsional `--export-ps-level=2|3` dan `--export-text-to-path`; `svg→emf`, `svg→wmf`; `pdf→svg` dengan `--pages=N` (default page 1) dan `--export-plain-svg`. Option `text_to_path` berlaku untuk pdf/eps/ps/svg output. Wave 3: `inkscape_export_id` + `inkscape_export_id_only` emit `--export-id=ID [--export-id-only]` di semua output (kecuali pdf→svg direction). Subprocess `inkscape --export-filename=… --export-type=… …` lalu `output_path.exists()` post-check.
+- Inkscape engine (SVG / Vector Tools, Wave 1 + 2 + 3 lengkap): pair `svg→png` (dpi / width / height), `svg→pdf` (vector preserved), `svg→svg` dengan operation `cleanup` (`--export-plain-svg --vacuum-defs`) atau `trim` (cleanup + `--export-area-drawing`). Wave 2: `svg→eps`, `svg→ps` dengan opsional `--export-ps-level=2|3` dan `--export-text-to-path`; `svg→emf`, `svg→wmf`; `pdf→svg` dengan `--pages=N` (default page 1) dan `--export-plain-svg`. Wave 3: export-by-id (`inkscape_export_id` + `inkscape_export_id_only` emit `--export-id=ID [--export-id-only]`); DXF round-trip (`svg→dxf` via extension `org.ekips.output.dxf_outlines` / R14 default atau `org.inkscape.output.dxf_twelve` / R12; `dxf→svg` via `--export-type=svg --export-plain-svg`); pixmap→SVG trace (8 bitmap formats → svg via pipeline `magick INPUT -colorspace Gray TEMP.pgm` lalu `potrace TEMP.pgm -s -o OUT.svg` dengan options trace_threshold/turdsize/alphamax). Engine declare `extra_binaries=("potrace", "magick")`. `convert()` dispatch ke `_run_trace` untuk bitmap pairs atau `build_command`+`_run` untuk Inkscape pairs. Subprocess via `asyncio.create_subprocess_exec` dengan `output_path.exists()` post-check.
 - Settings dataclass + JSON persistence di `~/.config/trex-converter/settings.json`; di-consume runner (max_concurrency) dan conversion_page (output_dir).
 - ImageMagick engine nyata dengan opsi lengkap: transform (rotate, flip, flop, auto-trim, free crop, aspect crop), resize modes (dimension, longest edge, percent, megapixel), fit-to-canvas dengan letterbox (`-resize WxH -background COLOR -gravity center -extent WxH`), color (grayscale, sepia, negate, normalize, brightness, contrast, gamma), filter (blur, sharpen, denoise, vignette), border/frame, watermark teks/gambar dengan gravity dan opacity, density, dan ICO multi-resolution auto-resize.
 - PDF engine nyata via PyMuPDF + qpdf: render halaman PDF ke PNG/JPG, ekstrak ke TXT/HTML, plus operasi PDF→PDF (extract pages, reorder, rotate, compress, repair via qpdf, encrypt/decrypt AES-256, strip metadata, edit metadata, watermark teks/gambar gravity 9-arah, page numbering/Bates dengan template `{n}`/`{total}`/`{page}` + skip-first-N + opacity, redact via `Page.search_for(term)` + `add_redact_annot` + `apply_redactions`), dan operasi pdf→folder (split, extract_images dengan dedupe by xref, extract_attachments via `embfile_*`).
@@ -183,7 +183,7 @@ cd /home/sarta/Project/trex-converter
 Current expected result:
 
 ```text
-311 passed
+327 passed
 ```
 
 ## System Dependencies
@@ -197,12 +197,13 @@ Expected binaries:
 - `qrencode` (QR generate)
 - `zbarimg` (QR/barcode decode)
 - `inkscape` (SVG / Vector Tools)
+- `potrace` (SVG / Vector Tools — pixmap→SVG trace)
 
 Install command:
 
 ```bash
 sudo apt-get update
-sudo apt-get install ffmpeg imagemagick libreoffice qpdf tesseract-ocr qrencode zbar-tools inkscape
+sudo apt-get install ffmpeg imagemagick libreoffice qpdf tesseract-ocr qrencode zbar-tools inkscape potrace python3-tinycss2
 ```
 
 ## Python Dependencies
@@ -224,7 +225,7 @@ Development dependencies:
 Roadmap lengkap dengan checklist `[x]/[~]/[ ]` ada di `next-development.md`. Highlight item terbesar yang masih `[ ]`:
 - PDF Tools: PDF→DOCX/EPUB, A/B compare, split-by-file-size, image-downsample compress, qpdf linearize. (Merge, split-by-range/N, watermark image, page numbering, extract_images, extract_attachments, redaction sudah selesai.)
 - Video: stream-copy trim, two-pass target-size compress, subtitle extract dari MKV, hardware accel detect.
-- SVG / Vector Tools Wave 3: DXF round-trip dan pixmap→SVG trace masih [ ] — keduanya **terblokir dependency**. DXF butuh `apt install python3-tinycss2` (Inkscape extension `dxf_outlines.py`/`dxf_input.py` import gagal tanpa modul ini). Trace butuh `apt install potrace`. Export-by-id (Wave 3 #1) sudah selesai. Wave 1 + 2 sudah selesai: svg → png/pdf/svg/eps/ps/emf/wmf, pdf → svg, plus text-to-path dan export-id options.
+- SVG / Vector Tools Wave 1 + 2 + 3 sudah lengkap (11 fitur). Pairs aktif: svg → png/pdf/svg/eps/ps/emf/wmf/dxf, pdf → svg, dxf → svg, dan 8 bitmap → svg (via potrace trace pipeline). Options: text_to_path, export_id (+only), inkscape_dxf_format (R14/R12), trace_threshold/turdsize/alphamax. Tidak ada item SVG yang tersisa di roadmap.
 - Modul baru §7: Ebook (Pandoc/Calibre), Metadata cross-cut (exiftool).
 - Cross-cutting §8: preview/details panel per task, batch drag-and-drop multi-file, preset save/load per modul, packaging `.deb` final.
 

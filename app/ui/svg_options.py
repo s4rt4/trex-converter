@@ -5,6 +5,7 @@ try:
         QAbstractSpinBox,
         QCheckBox,
         QComboBox,
+        QDoubleSpinBox,
         QGridLayout,
         QLabel,
         QLineEdit,
@@ -14,7 +15,7 @@ try:
         QWidget,
     )
 except ImportError:  # pragma: no cover
-    QAbstractSpinBox = QCheckBox = QComboBox = QGridLayout = QLabel = QLineEdit = QListView = QSpinBox = QVBoxLayout = QWidget = None
+    QAbstractSpinBox = QCheckBox = QComboBox = QDoubleSpinBox = QGridLayout = QLabel = QLineEdit = QListView = QSpinBox = QVBoxLayout = QWidget = None
 
 
 SVG_SVG_OPERATIONS = (
@@ -26,6 +27,11 @@ PS_LEVELS = (
     ("Auto (3)", 0),
     ("PostScript level 2", 2),
     ("PostScript level 3", 3),
+)
+
+DXF_FORMATS = (
+    ("DXF R14 (Desktop Cutting Plotter)", "r14"),
+    ("DXF R12 (legacy)", "r12"),
 )
 
 
@@ -90,6 +96,23 @@ class SVGOptionsPanel(QWidget):
             "Hide other objects (export selected ID only)", self
         )
 
+        self.dxf_format_combo = QComboBox(self)
+        self.dxf_format_combo.setView(QListView(self.dxf_format_combo))
+        for label, value in DXF_FORMATS:
+            self.dxf_format_combo.addItem(label, value)
+
+        self.trace_threshold_input = QDoubleSpinBox(self)
+        self.trace_threshold_input.setRange(0.0, 1.0)
+        self.trace_threshold_input.setSingleStep(0.05)
+        self.trace_threshold_input.setDecimals(2)
+        self.trace_threshold_input.setValue(0.5)
+
+        self.trace_turdsize_input = QSpinBox(self)
+        self.trace_turdsize_input.setRange(0, 1000)
+        self.trace_turdsize_input.setValue(2)
+        self.trace_turdsize_input.setSuffix(" px²")
+        _use_stepper(self.trace_turdsize_input)
+
         info = QLabel(
             "DPI / Width / Height apply when output is PNG. "
             "Width/Height override DPI. SVG operation applies when output is SVG: "
@@ -98,7 +121,9 @@ class SVGOptionsPanel(QWidget):
             "output. PDF page applies when input is a PDF (which page to import). "
             "Text → paths embeds outlined glyphs so the output renders without the "
             "original font installed. Export ID restricts the output to a single "
-            "object/layer by SVG id.",
+            "object/layer by SVG id. DXF format applies when output is DXF "
+            "(R14 default). Trace threshold/turdsize apply when input is a bitmap "
+            "image and output is SVG (potrace pipeline).",
             self,
         )
         info.setWordWrap(True)
@@ -119,6 +144,12 @@ class SVGOptionsPanel(QWidget):
         grid.addWidget(_field("Export ID", self), 5, 0)
         grid.addWidget(self.export_id_input, 5, 1, 1, 3)
         grid.addWidget(self.export_id_only_check, 6, 0, 1, 4)
+        grid.addWidget(_field("DXF format", self), 7, 0)
+        grid.addWidget(self.dxf_format_combo, 7, 1, 1, 3)
+        grid.addWidget(_field("Trace threshold", self), 8, 0)
+        grid.addWidget(self.trace_threshold_input, 8, 1)
+        grid.addWidget(_field("Trace turdsize", self), 8, 2)
+        grid.addWidget(self.trace_turdsize_input, 8, 3)
 
         layout.addLayout(grid)
         layout.addWidget(info)
@@ -151,6 +182,15 @@ class SVGOptionsPanel(QWidget):
             options["inkscape_export_id"] = export_id
             if self.export_id_only_check.isChecked():
                 options["inkscape_export_id_only"] = True
+        dxf_format = self.dxf_format_combo.currentData()
+        if dxf_format and dxf_format != "r14":
+            options["inkscape_dxf_format"] = dxf_format
+        threshold = self.trace_threshold_input.value()
+        if abs(threshold - 0.5) > 1e-6:
+            options["trace_threshold"] = threshold
+        turdsize = self.trace_turdsize_input.value()
+        if turdsize != 2:
+            options["trace_turdsize"] = turdsize
         return options
 
 

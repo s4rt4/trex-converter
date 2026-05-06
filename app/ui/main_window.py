@@ -273,7 +273,12 @@ PAGE_CONFIGS = (
     ),
     ConversionPageConfig(
         title="SVG / Vector",
-        input_formats=("svg", "pdf"),
+        input_formats=(
+            "svg",
+            "pdf",
+            "dxf",
+            "png", "jpg", "jpeg", "bmp", "tif", "tiff", "gif", "webp",
+        ),
         default_output="png",
         engine_name="inkscape",
         kind="svg",

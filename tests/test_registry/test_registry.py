@@ -97,6 +97,28 @@ def test_pdf_to_svg_routes_to_inkscape() -> None:
     assert registry.resolve("pdf", "svg").name == "inkscape"
 
 
+def test_dxf_pairs_route_to_inkscape() -> None:
+    registry = ConversionRegistry()
+
+    assert registry.resolve("svg", "dxf").name == "inkscape"
+    assert registry.resolve("dxf", "svg").name == "inkscape"
+
+
+def test_bitmap_to_svg_routes_to_inkscape_for_trace() -> None:
+    registry = ConversionRegistry()
+
+    assert registry.resolve("png", "svg").name == "inkscape"
+    assert registry.resolve("jpg", "svg").name == "inkscape"
+    assert registry.resolve("bmp", "svg").name == "inkscape"
+    assert registry.resolve("webp", "svg").name == "inkscape"
+
+
+def test_required_binaries_includes_potrace_for_trace() -> None:
+    registry = ConversionRegistry()
+
+    assert "potrace" in registry.required_binaries()
+
+
 def test_required_binaries_includes_inkscape() -> None:
     registry = ConversionRegistry()
 
