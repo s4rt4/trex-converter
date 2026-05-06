@@ -503,6 +503,11 @@ class ConversionPage(QWidget):
             return output in {"png", "pdf", "svg", "eps", "ps", "emf", "wmf", "dxf"}
         if self.config.kind == "subtitle-extract":
             return output in {"srt", "ass", "vtt"}
+        if self.config.kind == "ebook":
+            return output in {
+                "epub", "docx", "odt", "html", "htm",
+                "md", "markdown", "rst", "latex", "tex", "org", "fb2", "txt",
+            }
         return True
 
 

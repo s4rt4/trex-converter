@@ -25,6 +25,7 @@ from app.ui.multi_input_options import (
 )
 from app.ui.ocr_options import OCROptionsPanel
 from app.ui.pdf_operations import PDFOperationsPanel
+from app.ui.ebook_options import EbookOptionsPanel
 from app.ui.qr_options import QROptionsPanel
 from app.ui.svg_options import SVGOptionsPanel
 from app.ui.settings_page import SettingsPage
@@ -292,6 +293,18 @@ PAGE_CONFIGS = (
         engine_name="ffmpeg",
         kind="subtitle-extract",
         force_engine=True,
+    ),
+    ConversionPageConfig(
+        title="Ebook",
+        input_formats=(
+            "epub", "docx", "odt", "html", "htm",
+            "md", "markdown", "rst", "latex", "tex", "org", "fb2",
+        ),
+        default_output="epub",
+        engine_name="pandoc",
+        kind="ebook",
+        force_engine=True,
+        extra_options_factory=EbookOptionsPanel,
     ),
 )
 
@@ -664,7 +677,8 @@ class MainWindow(QMainWindow):
             #PDFNumberingOptionsPanel,
             #SlidesToImagesOptionsPanel,
             #DocumentOptionsPanel,
-            #QROptionsPanel {
+            #QROptionsPanel,
+            #EbookOptionsPanel {
                 background: $BRAND_SURFACE_SOFT;
                 border: 1px solid rgba(86, 182, 198, 145);
                 border-radius: 8px;
@@ -742,7 +756,9 @@ class MainWindow(QMainWindow):
             #QROptionsPanel,
             #QROptionsPanel QWidget,
             #SVGOptionsPanel,
-            #SVGOptionsPanel QWidget {
+            #SVGOptionsPanel QWidget,
+            #EbookOptionsPanel,
+            #EbookOptionsPanel QWidget {
                 background: $BRAND_SURFACE_SOFT;
             }
             #ImageOptionsPanel QSlider::groove:horizontal,
@@ -1025,5 +1041,6 @@ def _page_icon(kind: str):
         "qr": "fa5s.qrcode",
         "svg": "fa5s.bezier-curve",
         "subtitle-extract": "fa5s.closed-captioning",
+        "ebook": "fa5s.book",
     }
     return nav_icon(icons.get(kind, "fa5s.file"))

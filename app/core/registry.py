@@ -23,6 +23,10 @@ from app.engines.ocr_engine import (
     SUPPORTED_PAIRS as OCR_PAIRS,
     TesseractOCREngine,
 )
+from app.engines.pandoc_engine import (
+    PandocEngine,
+    SUPPORTED_PAIRS as PANDOC_PAIRS,
+)
 from app.engines.pdf_engine import PDF_IMAGE_FORMATS, PDFEngine
 from app.engines.qr_engine import (
     QREngine,
@@ -139,6 +143,10 @@ def default_entries() -> list[RegistryEntry]:
         (format_in, format_out, "inkscape", InkscapeEngine)
         for format_in, format_out in sorted(INKSCAPE_PAIRS)
     ]
+    pandoc_pairs = [
+        (format_in, format_out, "pandoc", PandocEngine)
+        for format_in, format_out in sorted(PANDOC_PAIRS)
+    ]
     mapping: list[tuple[str, str, str, type[BaseEngine]]] = [
         *[
             ("pdf", format_out, "pdf", PDFEngine)
@@ -148,7 +156,7 @@ def default_entries() -> list[RegistryEntry]:
         ("pdf", "txt", "pdf", PDFEngine),
         ("pdf", "html", "pdf", PDFEngine),
         ("pdf", "folder", "pdf", PDFEngine),
-    ] + ffmpeg_pairs + document_pairs + image_pairs + ocr_pairs + subtitle_pairs + archive_pairs + qr_pairs + inkscape_pairs
+    ] + ffmpeg_pairs + document_pairs + image_pairs + ocr_pairs + subtitle_pairs + archive_pairs + qr_pairs + inkscape_pairs + pandoc_pairs
     return [
         RegistryEntry(
             format_in=normalize_format(format_in),

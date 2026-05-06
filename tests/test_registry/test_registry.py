@@ -119,6 +119,20 @@ def test_required_binaries_includes_potrace_for_trace() -> None:
     assert "potrace" in registry.required_binaries()
 
 
+def test_md_to_epub_routes_to_pandoc() -> None:
+    registry = ConversionRegistry()
+
+    assert registry.resolve("md", "epub").name == "pandoc"
+    assert registry.resolve("epub", "md").name == "pandoc"
+    assert registry.resolve("rst", "latex").name == "pandoc"
+
+
+def test_required_binaries_includes_pandoc() -> None:
+    registry = ConversionRegistry()
+
+    assert "pandoc" in registry.required_binaries()
+
+
 def test_required_binaries_includes_inkscape() -> None:
     registry = ConversionRegistry()
 
