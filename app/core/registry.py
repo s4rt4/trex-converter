@@ -9,6 +9,10 @@ from app.engines.archive_engine import (
 from app.engines.base import BaseEngine
 from app.engines.ffmpeg_engine import FFmpegEngine, SUPPORTED_PAIRS as FFMPEG_PAIRS
 from app.engines.imagemagick_engine import IMAGE_FORMATS, ImageMagickEngine
+from app.engines.inkscape_engine import (
+    InkscapeEngine,
+    SUPPORTED_PAIRS as INKSCAPE_PAIRS,
+)
 from app.engines.libreoffice_engine import (
     LibreOfficeEngine,
     SUPPORTED_INPUT_FORMATS,
@@ -131,6 +135,10 @@ def default_entries() -> list[RegistryEntry]:
         (format_in, format_out, "qr", QREngine)
         for format_in, format_out in sorted(QR_PAIRS)
     ]
+    inkscape_pairs = [
+        (format_in, format_out, "inkscape", InkscapeEngine)
+        for format_in, format_out in sorted(INKSCAPE_PAIRS)
+    ]
     mapping: list[tuple[str, str, str, type[BaseEngine]]] = [
         *[
             ("pdf", format_out, "pdf", PDFEngine)
@@ -140,7 +148,7 @@ def default_entries() -> list[RegistryEntry]:
         ("pdf", "txt", "pdf", PDFEngine),
         ("pdf", "html", "pdf", PDFEngine),
         ("pdf", "folder", "pdf", PDFEngine),
-    ] + ffmpeg_pairs + document_pairs + image_pairs + ocr_pairs + subtitle_pairs + archive_pairs + qr_pairs
+    ] + ffmpeg_pairs + document_pairs + image_pairs + ocr_pairs + subtitle_pairs + archive_pairs + qr_pairs + inkscape_pairs
     return [
         RegistryEntry(
             format_in=normalize_format(format_in),

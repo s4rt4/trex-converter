@@ -77,3 +77,27 @@ def test_required_binaries_includes_qr_extras() -> None:
     # qrencode is the primary binary; zbarimg is registered as an extra
     assert "qrencode" in binaries
     assert "zbarimg" in binaries
+
+
+def test_svg_to_png_routes_to_inkscape() -> None:
+    registry = ConversionRegistry()
+
+    assert registry.resolve("svg", "png").name == "inkscape"
+    assert registry.resolve("svg", "pdf").name == "inkscape"
+    assert registry.resolve("svg", "svg").name == "inkscape"
+    assert registry.resolve("svg", "eps").name == "inkscape"
+    assert registry.resolve("svg", "ps").name == "inkscape"
+    assert registry.resolve("svg", "emf").name == "inkscape"
+    assert registry.resolve("svg", "wmf").name == "inkscape"
+
+
+def test_pdf_to_svg_routes_to_inkscape() -> None:
+    registry = ConversionRegistry()
+
+    assert registry.resolve("pdf", "svg").name == "inkscape"
+
+
+def test_required_binaries_includes_inkscape() -> None:
+    registry = ConversionRegistry()
+
+    assert "inkscape" in registry.required_binaries()

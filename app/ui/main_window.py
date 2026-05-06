@@ -26,6 +26,7 @@ from app.ui.multi_input_options import (
 from app.ui.ocr_options import OCROptionsPanel
 from app.ui.pdf_operations import PDFOperationsPanel
 from app.ui.qr_options import QROptionsPanel
+from app.ui.svg_options import SVGOptionsPanel
 from app.ui.settings_page import SettingsPage
 from app.ui.subtitle_options import SubtitleOptionsPanel
 from app.ui.video_options import VideoOptionsPanel
@@ -269,6 +270,15 @@ PAGE_CONFIGS = (
         kind="qr",
         force_engine=True,
         extra_options_factory=QROptionsPanel,
+    ),
+    ConversionPageConfig(
+        title="SVG / Vector",
+        input_formats=("svg", "pdf"),
+        default_output="png",
+        engine_name="inkscape",
+        kind="svg",
+        force_engine=True,
+        extra_options_factory=SVGOptionsPanel,
     ),
 )
 
@@ -629,7 +639,8 @@ class MainWindow(QMainWindow):
             #PDFNumberingOptionsPanel,
             #SlidesToImagesOptionsPanel,
             #DocumentOptionsPanel,
-            #QROptionsPanel {
+            #QROptionsPanel,
+            #SVGOptionsPanel {
                 background: $BRAND_SURFACE_SOFT;
                 border: 1px solid rgba(86, 182, 198, 145);
                 border-radius: 8px;
@@ -699,7 +710,9 @@ class MainWindow(QMainWindow):
             #DocumentOptionsPanel,
             #DocumentOptionsPanel QWidget,
             #QROptionsPanel,
-            #QROptionsPanel QWidget {
+            #QROptionsPanel QWidget,
+            #SVGOptionsPanel,
+            #SVGOptionsPanel QWidget {
                 background: $BRAND_SURFACE_SOFT;
             }
             #ImageOptionsPanel QSlider::groove:horizontal,
@@ -950,5 +963,6 @@ def _page_icon(kind: str):
         "archive": "fa5s.file-archive",
         "archive-compress": "fa5s.compress",
         "qr": "fa5s.qrcode",
+        "svg": "fa5s.bezier-curve",
     }
     return surface_icon(icons.get(kind, "fa5s.file"))

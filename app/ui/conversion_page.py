@@ -358,6 +358,15 @@ class ConversionPage(QWidget):
             for output in self.registry.list_supported_outputs(format_in)
             if self._output_belongs_to_page(output)
         ]
+        if self.config.force_engine:
+            try:
+                forced = self.registry.engine_by_name(self.config.engine_name)
+            except KeyError:
+                forced = None
+            if forced is not None:
+                outputs = [
+                    output for output in outputs if forced.supports(format_in, output)
+                ]
         if self.config.default_output in outputs:
             outputs.remove(self.config.default_output)
             outputs.insert(0, self.config.default_output)
@@ -490,6 +499,8 @@ class ConversionPage(QWidget):
             return output in {"zip", "tar", "tgz", "tbz", "txz"}
         if self.config.kind == "qr":
             return output in {"png", "svg", "txt"}
+        if self.config.kind == "svg":
+            return output in {"png", "pdf", "svg", "eps", "ps", "emf", "wmf"}
         return True
 
 
