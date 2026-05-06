@@ -1,8 +1,54 @@
 #!/bin/sh
 set -e
 
-command -v ffmpeg >/dev/null 2>&1 || echo "ffmpeg is not installed"
-command -v libreoffice >/dev/null 2>&1 || echo "libreoffice is not installed"
-command -v tesseract >/dev/null 2>&1 || echo "tesseract is not installed"
+# Tell users about optional engine binaries that aren't satisfied via Depends.
+# These are listed under Recommends so apt usually installs them, but we
+# warn explicitly when a particular module won't work without them.
+
+check() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        echo "T-Rex Converter: $1 missing — $2 will not work"
+    fi
+}
+
+# Hard requirements (also in Depends; warn just in case Depends was bypassed).
+check ffmpeg "Video / Audio modules"
+check libreoffice "Document module"
+check tesseract "OCR module"
+check qpdf "PDF repair / linearize"
+check magick "Image module (ImageMagick)"
+
+# Optional — installed via Recommends.
+check inkscape "SVG / Vector module"
+check potrace "SVG → pixmap trace"
+check pandoc "Ebook module"
+check exiftool "Metadata module"
+check qrencode "QR generate"
+check zbarimg "QR / barcode decode"
+
+# Refresh icon and desktop databases so the launcher shows up.
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q -t /usr/share/icons/hicolor || true
+fi
+
+cat >&2 <<'EOF'
+T-Rex Converter installed.
+
+Three Python deps aren't packaged in Debian apt and need to be installed
+manually for the corresponding modules to work:
+    PyMuPDF  — required by every PDF feature
+    qasync   — required by the Qt event loop
+    pdf2docx — required by PDF → DOCX conversion
+
+Install them with pip in a virtualenv:
+    python3 -m venv ~/.venv-trex && \
+    ~/.venv-trex/bin/pip install PyMuPDF qasync pdf2docx
+
+Then launch via:
+    ~/.venv-trex/bin/t-rex-converter
+EOF
 
 exit 0

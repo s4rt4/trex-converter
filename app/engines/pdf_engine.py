@@ -40,7 +40,7 @@ PDF_OPERATIONS = {
     "redact",
     "merge",
 }
-PDF_FOLDER_OPERATIONS = {"split", "extract_images", "extract_attachments"}
+PDF_FOLDER_OPERATIONS = {"split", "extract_images", "extract_attachments", "compare"}
 GRAVITY_TO_FRACTION = {
     "northwest": (0.05, 0.08),
     "north": (0.5, 0.08),
@@ -76,6 +76,8 @@ class PDFEngine(BaseEngine):
                 await self._run_extract_images(task, output_path)
             elif operation == "extract_attachments":
                 await self._run_extract_attachments(task, output_path)
+            elif operation == "compare":
+                await self._run_compare(task, output_path)
             else:
                 raise RuntimeError(
                     f"Unsupported folder operation: {operation} "
@@ -317,6 +319,71 @@ class PDFEngine(BaseEngine):
             _close(document)
 
         task.append_log(f"Wrote {count} attachment(s) to {output_dir}")
+        task.progress = 1.0
+
+    async def _run_compare(self, task: Task, output_dir: Path) -> None:
+        import tempfile
+
+        sources = list(task.inputs)
+        if len(sources) < 2:
+            raise RuntimeError(
+                "PDF compare requires two PDF inputs (left and right)"
+            )
+        left_path, right_path = sources[0], sources[1]
+
+        fitz = _load_fitz()
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        dpi = _int_option(task.options.get("compare_dpi")) or 150
+        if dpi < 72 or dpi > 600:
+            raise RuntimeError(f"compare_dpi must be 72–600, got {dpi}")
+        fuzz = _int_option(task.options.get("compare_fuzz_percent"))
+        if fuzz is None:
+            fuzz = 5
+        if fuzz < 0 or fuzz > 100:
+            raise RuntimeError(f"compare_fuzz_percent must be 0–100, got {fuzz}")
+
+        left = fitz.open(str(left_path))
+        right = fitz.open(str(right_path))
+        try:
+            left_pages = len(left)
+            right_pages = len(right)
+            common = min(left_pages, right_pages)
+            if common == 0:
+                raise RuntimeError("Both PDFs must have at least one page")
+
+            stem = Path(left_path).stem
+            scale = dpi / 72.0
+            matrix = fitz.Matrix(scale, scale)
+
+            for index in range(common):
+                with tempfile.TemporaryDirectory(prefix="trex-pdfdiff-") as tmpdir:
+                    tmp = Path(tmpdir)
+                    left_png = tmp / f"l-{index + 1:04d}.png"
+                    right_png = tmp / f"r-{index + 1:04d}.png"
+                    left.load_page(index).get_pixmap(matrix=matrix).save(str(left_png))
+                    right.load_page(index).get_pixmap(matrix=matrix).save(str(right_png))
+
+                    diff_path = output_dir / f"{stem}-page{index + 1:03d}-diff.png"
+                    diff_count = await _run_imagemagick_compare(
+                        left_png, right_png, diff_path, fuzz
+                    )
+                    task.append_log(
+                        f"Page {index + 1}: {diff_count} differing pixel(s) → {diff_path.name}"
+                    )
+                task.progress = 0.05 + 0.85 * ((index + 1) / common)
+                await asyncio.sleep(0)
+
+            if left_pages != right_pages:
+                task.append_log(
+                    f"Page-count mismatch: left={left_pages}, right={right_pages}; "
+                    f"compared {common} page(s)"
+                )
+        finally:
+            _close(left)
+            _close(right)
+
+        task.append_log(f"Wrote {common} diff image(s) to {output_dir}")
         task.progress = 1.0
 
     async def _run_merge(self, task: Task, output_path: Path) -> None:
@@ -978,6 +1045,51 @@ def _wrap_xhtml(title: str, body_html: str) -> str:
         f'<body>\n{stripped}\n</body>\n'
         '</html>\n'
     )
+
+
+async def _run_imagemagick_compare(
+    left: Path, right: Path, diff: Path, fuzz_percent: int
+) -> int:
+    """Run ImageMagick `compare` and return the number of differing pixels.
+
+    Exit code 0 = identical, 1 = differences (but compare wrote diff anyway),
+    2 = error. We treat 0 and 1 as success and parse stderr for the AE
+    metric. Falls back to "magick compare" or "compare" depending on which
+    binary is installed.
+    """
+    binary = _imagemagick_compare_binary()
+    command = [
+        *binary,
+        "-metric", "AE",
+        "-fuzz", f"{fuzz_percent}%",
+        str(left),
+        str(right),
+        str(diff),
+    ]
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr_bytes = await process.communicate()
+    if process.returncode not in (0, 1):
+        text = stderr_bytes.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(
+            f"ImageMagick compare exited with code {process.returncode}: {text}"
+        )
+    raw = stderr_bytes.decode("utf-8", errors="replace").strip()
+    try:
+        return int(raw.split()[0]) if raw else 0
+    except (ValueError, IndexError):
+        return 0
+
+
+def _imagemagick_compare_binary() -> tuple[str, ...]:
+    from shutil import which
+
+    if which("magick"):
+        return ("magick", "compare")
+    return ("compare",)
 
 
 def _safe_attachment_name(name: str) -> str:

@@ -1527,3 +1527,75 @@ async def test_linearize_invokes_qpdf_with_linearize_flag(tmp_path, monkeypatch)
     args = (tmp_path / "qpdf.args").read_text().strip()
     assert "--linearize" in args
     assert (tmp_path / "out.pdf").exists()
+
+
+# ---- PDF A/B compare ----
+
+
+@pytest.mark.asyncio
+async def test_compare_writes_per_page_diffs(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    from shutil import which
+    if which("magick") is None and which("compare") is None:
+        pytest.skip("ImageMagick `compare` binary not on PATH")
+
+    left = tmp_path / "left.pdf"
+    right = tmp_path / "right.pdf"
+    _make_pdf_with_text(left, fitz, ["original page 1", "original page 2"])
+    _make_pdf_with_text(right, fitz, ["modified page 1", "modified page 2"])
+
+    out_dir = tmp_path / "diffs"
+    task = Task(
+        input_path=left,
+        output_path=out_dir,
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"operation": "compare", "compare_dpi": 100},
+        extra_inputs=[right],
+    )
+    await PDFEngine().convert(task)
+
+    diffs = sorted(out_dir.glob("*-diff.png"))
+    assert len(diffs) == 2
+    for diff in diffs:
+        assert diff.stat().st_size > 0
+
+
+@pytest.mark.asyncio
+async def test_compare_requires_two_inputs(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "only.pdf"
+    _make_pdf_with_text(src, fitz, ["a"])
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "diffs",
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"operation": "compare"},
+    )
+    with pytest.raises(RuntimeError, match="two PDF inputs"):
+        await PDFEngine().convert(task)
+
+
+@pytest.mark.asyncio
+async def test_compare_validates_dpi(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+    a = tmp_path / "a.pdf"
+    b = tmp_path / "b.pdf"
+    _make_pdf_with_text(a, fitz, ["x"])
+    _make_pdf_with_text(b, fitz, ["y"])
+
+    task = Task(
+        input_path=a,
+        output_path=tmp_path / "diffs",
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"operation": "compare", "compare_dpi": 30},
+        extra_inputs=[b],
+    )
+    with pytest.raises(RuntimeError, match="compare_dpi"):
+        await PDFEngine().convert(task)

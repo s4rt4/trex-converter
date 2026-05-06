@@ -14,7 +14,7 @@ Prinsip utama:
 
 ## Current Status
 
-Versi project saat ini: `0.3.0`.
+Versi project saat ini: `0.4.0`.
 
 Sudah ada:
 - Core task model dan task status lifecycle, plus dukungan multi-input via `Task.extra_inputs` + property `inputs`/`formats_in` (DB punya kolom `extra_inputs` dengan auto-migration ALTER TABLE).
@@ -30,6 +30,11 @@ Sudah ada:
 - Archive engine Python-pure (stdlib `zipfile` + `tarfile`): extract zip/tar/tgz/tbz/txz/gz/bz2/xz → folder (reject absolute path dan path-traversal entries; tar extract pakai `filter='data'`). Plus compress folder → zip/tar/tgz/tbz/txz (ZIP_DEFLATED / tar mode w/w:gz/w:bz2/w:xz, file-only entries via Path.rglob, POSIX relative arcnames).
 - QR engine: `qrencode` (generate txt → png/svg dengan size/margin/ECC L-M-Q-H) + `zbarimg` (decode image → txt, exit 4 = no barcode). Engine declare `requires_binary="qrencode"` + `extra_binaries=("zbarimg",)`.
 - Pandoc engine (Ebook): 138 pair format matrix antara epub/docx/odt/html/md/rst/latex/org/fb2 (semua bidirectional, aliases md/markdown, latex/tex, html/htm collapsed) plus output txt via Pandoc plain writer. Subprocess `pandoc --from FROM --to TO --output OUT IN` plus optional `--metadata key=value` (title/author/lang/publisher/date), `--toc`, `--embed-resources` (HTML self-contained), `--standalone` (forced untuk html/latex). Helper `build_command(task)` dispatch. Sidebar "Ebook" force_engine.
+- ExifTool engine (Metadata cross-cut): operations read (file → txt JSON/text dump), strip (`-overwrite_original -all=`), edit (`-Title=`/`-Artist=`/`-Author=`/`-Subject=`/`-Description=`/`-Comment=`/`-Copyright=`/`-Keywords=`). Pairs same-format + → txt untuk 18 input format (image jpg/png/tif/heic/webp/gif, audio mp3/m4a/flac/wav/ogg, video mp4/mov/mkv/webm, pdf). Sidebar "Metadata" force_engine.
+- PDF A/B compare: multi-input PDFEngine `compare` operation (output folder). Render setiap halaman dari dua PDF via PyMuPDF Pixmap @ DPI configurable, panggil `magick compare -metric AE -fuzz N%` ke `<stem>-pageNNN-diff.png`. Helper `_run_imagemagick_compare` parse AE count dari stderr.
+- Preset save/load: `app/core/presets.py` JSON persistence di `~/.config/trex-converter/presets/<kind>/<name>.json`. Setiap conversion page punya preset combo + Save/Load/Delete buttons. Panel opt-in via `apply_preset(payload)` callback.
+- Drag-and-drop: ConversionPage `setAcceptDrops(True)` plus `dragEnterEvent`/`dropEvent` route ke `_accept_paths()` shared helper.
+- Task details: QueuePanel Info button (kolom 8) + `cellDoubleClicked` → `TaskDetailsDialog` (input/output thumbnails + metadata block + log in QPlainTextEdit).
 - Inkscape engine (SVG / Vector Tools, Wave 1 + 2 + 3 lengkap): pair `svg→png` (dpi / width / height), `svg→pdf` (vector preserved), `svg→svg` dengan operation `cleanup` (`--export-plain-svg --vacuum-defs`) atau `trim` (cleanup + `--export-area-drawing`). Wave 2: `svg→eps`, `svg→ps` dengan opsional `--export-ps-level=2|3` dan `--export-text-to-path`; `svg→emf`, `svg→wmf`; `pdf→svg` dengan `--pages=N` (default page 1) dan `--export-plain-svg`. Wave 3: export-by-id (`inkscape_export_id` + `inkscape_export_id_only` emit `--export-id=ID [--export-id-only]`); DXF round-trip (`svg→dxf` via extension `org.ekips.output.dxf_outlines` / R14 default atau `org.inkscape.output.dxf_twelve` / R12; `dxf→svg` via `--export-type=svg --export-plain-svg`); pixmap→SVG trace (8 bitmap formats → svg via pipeline `magick INPUT -colorspace Gray TEMP.pgm` lalu `potrace TEMP.pgm -s -o OUT.svg` dengan options trace_threshold/turdsize/alphamax). Engine declare `extra_binaries=("potrace", "magick")`. `convert()` dispatch ke `_run_trace` untuk bitmap pairs atau `build_command`+`_run` untuk Inkscape pairs. Subprocess via `asyncio.create_subprocess_exec` dengan `output_path.exists()` post-check.
 - Settings dataclass + JSON persistence di `~/.config/trex-converter/settings.json`; di-consume runner (max_concurrency) dan conversion_page (output_dir).
 - ImageMagick engine nyata dengan opsi lengkap: transform (rotate, flip, flop, auto-trim, free crop, aspect crop), resize modes (dimension, longest edge, percent, megapixel), fit-to-canvas dengan letterbox (`-resize WxH -background COLOR -gravity center -extent WxH`), color (grayscale, sepia, negate, normalize, brightness, contrast, gamma), filter (blur, sharpen, denoise, vignette), border/frame, watermark teks/gambar dengan gravity dan opacity, density, dan ICO multi-resolution auto-resize.
@@ -61,6 +66,8 @@ Sidebar menu:
 - Slides to Images
 - Subtitle Extract
 - Ebook
+- Metadata
+- PDF Compare
 - Video Concat
 - Audio Mix
 - Image Montage
@@ -186,7 +193,7 @@ cd /home/sarta/Project/trex-converter
 Current expected result:
 
 ```text
-374 passed
+401 passed
 ```
 
 ## System Dependencies
@@ -202,12 +209,13 @@ Expected binaries:
 - `inkscape` (SVG / Vector Tools)
 - `potrace` (SVG / Vector Tools — pixmap→SVG trace)
 - `pandoc` (Ebook module)
+- `libimage-exiftool-perl` / `exiftool` (Metadata module)
 
 Install command:
 
 ```bash
 sudo apt-get update
-sudo apt-get install ffmpeg imagemagick libreoffice qpdf tesseract-ocr qrencode zbar-tools inkscape potrace python3-tinycss2 pandoc
+sudo apt-get install ffmpeg imagemagick libreoffice qpdf tesseract-ocr qrencode zbar-tools inkscape potrace python3-tinycss2 pandoc libimage-exiftool-perl
 ```
 
 ## Python Dependencies
@@ -226,12 +234,11 @@ Development dependencies:
 
 ## Next Likely Work
 
-Roadmap lengkap dengan checklist `[x]/[~]/[ ]` ada di `next-development.md`. Highlight item terbesar yang masih `[ ]`:
-- PDF Tools: A/B compare (visual diff) — satu-satunya item PDF yang masih `[ ]`. (DOCX, EPUB, split by range/N/size, image-downsample compress, qpdf linearize, plus semua operasi sebelumnya sudah selesai.)
-- Video roadmap fully closed: trim (stream-copy + re-encode), concat, two-pass target-size, resolution preset, subtitle extract, subtitle burn-in, GIF/WebP, contact sheet, watermark text/logo, reverse, speed change, hwaccel detect.
-- SVG / Vector Tools Wave 1 + 2 + 3 sudah lengkap (11 fitur). Pairs aktif: svg → png/pdf/svg/eps/ps/emf/wmf/dxf, pdf → svg, dxf → svg, dan 8 bitmap → svg (via potrace trace pipeline). Options: text_to_path, export_id (+only), inkscape_dxf_format (R14/R12), trace_threshold/turdsize/alphamax. Tidak ada item SVG yang tersisa di roadmap.
-- Modul baru §7: Metadata cross-cut (exiftool). Ebook via Pandoc sudah selesai (138 pair); MOBI via Calibre belum diimplementasi.
-- Cross-cutting §8: preview/details panel per task, batch drag-and-drop multi-file, preset save/load per modul, packaging `.deb` final.
+Roadmap lengkap dengan checklist `[x]/[~]/[ ]` ada di `next-development.md`.
+
+**Roadmap fully closed** untuk semua module: Image, Video, Audio, Document, OCR, PDF Tools (DOCX/EPUB/A-B compare/split-by-size/image-downsample/linearize semua selesai), Subtitle, Archive, QR, SVG/Vector (Wave 1+2+3 lengkap, 11 fitur termasuk DXF round-trip + pixmap→SVG trace), Ebook (Pandoc 138 pairs), Metadata (exiftool cross-cut). Cross-cutting items selesai: Settings, drag-and-drop multi-file, preset save/load, preview/details panel, .deb packaging final dengan `dpkg-buildpackage` build script.
+
+Tidak ada follow-up roadmap yang tersisa kecuali optional MOBI via Calibre (di-skip — Calibre dependency 200 MB).
 
 **Catatan arsitektur multi-input**: `Task` punya field `extra_inputs: list[Path]` plus property `inputs` (primary + extras) dan `formats_in` (suffix per input). DB `tasks.sqlite3` dapat kolom baru `extra_inputs TEXT` dengan auto-migration `ALTER TABLE` (deteksi via `PRAGMA table_info`). `ConversionPageConfig` dapat flag `multi_input: bool` (UI: list widget + Add/Remove/Clear + multi-select dialog) dan `default_options: tuple[tuple[str, object], ...]` (force-inject option). POC: PDF Merge page (multi_input=True, force_engine=True, default_options=operation:merge) → `PDFEngine._run_merge` iterate `Document.insert_pdf` untuk setiap source di `task.inputs`. Video concat / audio mix / image montage tinggal tambah engine path baca `task.inputs` + halaman multi_input=True. Multi-output masih ditangani via `directory_output` flag (pattern Archive).
 

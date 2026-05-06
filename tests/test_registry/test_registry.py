@@ -133,6 +133,12 @@ def test_required_binaries_includes_pandoc() -> None:
     assert "pandoc" in registry.required_binaries()
 
 
+def test_required_binaries_includes_exiftool() -> None:
+    registry = ConversionRegistry()
+
+    assert "exiftool" in registry.required_binaries()
+
+
 def test_required_binaries_includes_inkscape() -> None:
     registry = ConversionRegistry()
 

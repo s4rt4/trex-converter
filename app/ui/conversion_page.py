@@ -70,6 +70,7 @@ class ConversionPage(QWidget):
         self.registry = registry
         self._on_enqueue = on_enqueue
         self._input_paths: list[Path] = []
+        self.setAcceptDrops(True)
         self.input_display: QLineEdit | None = None
         self.input_list: QListWidget | None = None
         self.quality_input: QSlider | None = None
@@ -78,6 +79,8 @@ class ConversionPage(QWidget):
         self.bitrate_input: QLineEdit | None = None
         self.strip_input: QCheckBox | None = None
         self.extra_options_widget: QWidget | None = None
+        self.preset_combo: QComboBox | None = None
+        self._preset_input_dialog = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 14, 16, 14)
@@ -237,6 +240,8 @@ class ConversionPage(QWidget):
             self.extra_options_widget = extras
             convert_layout.addWidget(extras)
 
+        self._build_preset_row(convert_layout, convert_tab)
+
         convert_layout.addStretch(1)
         self.page_tabs.addTab(convert_tab, "Convert")
 
@@ -259,11 +264,7 @@ class ConversionPage(QWidget):
             )
             if not picked:
                 return
-            folder = Path(picked)
-            self._input_paths = [folder]
-            self.input_display.setText(str(folder))
-            self._populate_outputs(folder)
-            self._update_output_path()
+            self._accept_paths([Path(picked)])
             return
 
         filters = " ".join(f"*.{fmt}" for fmt in self.config.input_formats)
@@ -275,24 +276,7 @@ class ConversionPage(QWidget):
             )
             if not picked:
                 return
-            for raw in picked:
-                path = Path(raw)
-                if path.suffix.lower().lstrip(".") not in self.config.input_formats:
-                    QMessageBox.warning(
-                        self,
-                        "Unsupported Format",
-                        f"{path.suffix} is not supported in {self.config.title}",
-                    )
-                    continue
-                if path in self._input_paths:
-                    continue
-                self._input_paths.append(path)
-                self.input_list.addItem(QListWidgetItem(str(path)))
-            if not self._input_paths:
-                return
-            primary = self._input_paths[0]
-            self._populate_outputs(primary)
-            self._update_output_path()
+            self._accept_paths([Path(p) for p in picked])
             return
 
         input_name = _get_open_file_name(
@@ -302,13 +286,75 @@ class ConversionPage(QWidget):
         )
         if not input_name:
             return
-        input_path = Path(input_name)
-        if input_path.suffix.lower().lstrip(".") not in self.config.input_formats:
-            QMessageBox.warning(self, "Unsupported Format", f"{input_path.suffix} is not supported in {self.config.title}")
+        self._accept_paths([Path(input_name)])
+
+    def _accept_paths(self, paths: list[Path]) -> None:
+        """Common entry point for file picker and drag-and-drop.
+
+        Validates extensions against the page config and updates the input
+        widget(s). For multi-input pages, appends new paths; for single-input
+        pages the first valid path replaces the current selection.
+        """
+        if not paths:
             return
-        self._input_paths = [input_path]
-        self.input_display.setText(str(input_path))
-        self._populate_outputs(input_path)
+
+        if self.config.directory_input:
+            folder = paths[0]
+            if not folder.is_dir():
+                QMessageBox.warning(
+                    self,
+                    "Folder Required",
+                    f"{self.config.title} expects a folder, got file: {folder.name}",
+                )
+                return
+            self._input_paths = [folder]
+            if self.input_display is not None:
+                self.input_display.setText(str(folder))
+            self._populate_outputs(folder)
+            self._update_output_path()
+            return
+
+        accepted: list[Path] = []
+        rejected: list[str] = []
+        for path in paths:
+            ext = path.suffix.lower().lstrip(".")
+            if ext not in self.config.input_formats:
+                rejected.append(path.name)
+                continue
+            accepted.append(path)
+
+        if rejected and not accepted:
+            QMessageBox.warning(
+                self,
+                "Unsupported Format",
+                f"No supported files in selection. Rejected: {', '.join(rejected[:5])}",
+            )
+            return
+
+        if self.config.multi_input:
+            for path in accepted:
+                if path in self._input_paths:
+                    continue
+                self._input_paths.append(path)
+                if self.input_list is not None:
+                    self.input_list.addItem(QListWidgetItem(str(path)))
+            if not self._input_paths:
+                return
+            primary = self._input_paths[0]
+        else:
+            primary = accepted[0]
+            self._input_paths = [primary]
+            if self.input_display is not None:
+                self.input_display.setText(str(primary))
+            if rejected:
+                # Single-input but multiple files dropped — politely inform.
+                QMessageBox.information(
+                    self,
+                    "Dropped Extras Ignored",
+                    f"This page accepts one file at a time; using {primary.name}.",
+                )
+
+        self._populate_outputs(primary)
         self._update_output_path()
 
     def _remove_selected_inputs(self) -> None:
@@ -508,7 +554,191 @@ class ConversionPage(QWidget):
                 "epub", "docx", "odt", "html", "htm",
                 "md", "markdown", "rst", "latex", "tex", "org", "fb2", "txt",
             }
+        if self.config.kind == "pdf-compare":
+            return output == "folder"
+        if self.config.kind == "metadata":
+            return output in {
+                "jpg", "jpeg", "png", "tif", "tiff", "heic", "webp", "gif",
+                "mp3", "m4a", "flac", "wav", "ogg",
+                "mp4", "mov", "mkv", "webm",
+                "pdf", "txt",
+            }
         return True
+
+    # ---- Presets ---------------------------------------------------------
+
+    def _build_preset_row(self, parent_layout: QVBoxLayout, parent: QWidget) -> None:
+        from PySide6.QtWidgets import QInputDialog
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.setContentsMargins(0, 0, 0, 0)
+
+        label = QLabel("Preset:", parent)
+        label.setObjectName("FieldLabel")
+        row.addWidget(label)
+
+        self.preset_combo = QComboBox(parent)
+        self.preset_combo.setView(QListView(self.preset_combo))
+        self.preset_combo.setObjectName("PresetCombo")
+        self.preset_combo.setMinimumWidth(180)
+        self._refresh_presets()
+        row.addWidget(self.preset_combo, 1)
+
+        load_button = QPushButton("Load", parent)
+        load_button.setIcon(surface_icon("fa5s.folder-open"))
+        load_button.setIconSize(ICON_SIZE)
+        load_button.clicked.connect(self._load_selected_preset)
+        row.addWidget(load_button)
+
+        save_button = QPushButton("Save", parent)
+        save_button.setIcon(surface_icon("fa5s.save"))
+        save_button.setIconSize(ICON_SIZE)
+        save_button.clicked.connect(self._save_current_as_preset)
+        row.addWidget(save_button)
+
+        delete_button = QPushButton("Delete", parent)
+        delete_button.setIcon(surface_icon("fa5s.trash"))
+        delete_button.setIconSize(ICON_SIZE)
+        delete_button.clicked.connect(self._delete_selected_preset)
+        row.addWidget(delete_button)
+
+        parent_layout.addLayout(row)
+        # QInputDialog import is captured for later use without polluting top-level
+        self._preset_input_dialog = QInputDialog
+
+    def _refresh_presets(self) -> None:
+        from app.core.presets import list_presets
+
+        if self.preset_combo is None:
+            return
+        current = self.preset_combo.currentText() if self.preset_combo.count() else ""
+        self.preset_combo.blockSignals(True)
+        self.preset_combo.clear()
+        self.preset_combo.addItem("(no preset)", None)
+        for name in list_presets(self.config.kind):
+            self.preset_combo.addItem(name, name)
+        if current:
+            idx = self.preset_combo.findText(current)
+            if idx >= 0:
+                self.preset_combo.setCurrentIndex(idx)
+        self.preset_combo.blockSignals(False)
+
+    def _load_selected_preset(self) -> None:
+        from app.core.presets import load_preset
+
+        name = self.preset_combo.currentData()
+        if not name:
+            QMessageBox.information(
+                self, "No Preset", "Pick a preset from the dropdown first."
+            )
+            return
+        payload = load_preset(self.config.kind, str(name))
+        if not payload:
+            QMessageBox.warning(
+                self, "Preset Empty", f"Preset '{name}' is empty or unreadable."
+            )
+            return
+        self._apply_preset_payload(payload)
+
+    def _apply_preset_payload(self, payload: dict) -> None:
+        # Apply known top-level scalars first.
+        if self.config.show_quality and self.quality_input is not None:
+            value = payload.get("quality")
+            if isinstance(value, (int, float)):
+                self.quality_input.setValue(int(value))
+        if self.config.show_resize and self.resize_input is not None:
+            value = payload.get("resize")
+            if isinstance(value, str):
+                self.resize_input.setText(value)
+        if self.config.show_bitrate and self.bitrate_input is not None:
+            value = payload.get("bitrate")
+            if isinstance(value, str):
+                self.bitrate_input.setText(value)
+        if self.strip_input is not None and "strip" in payload:
+            self.strip_input.setChecked(bool(payload["strip"]))
+
+        # Hand the full payload to the extras panel so it can re-populate
+        # whatever widgets it owns. Panels opt in by exposing apply_preset.
+        if self.extra_options_widget is not None:
+            applier = getattr(self.extra_options_widget, "apply_preset", None)
+            if callable(applier):
+                try:
+                    applier(payload)
+                except Exception:  # pragma: no cover - defensive against panel bugs
+                    pass
+
+    def _save_current_as_preset(self) -> None:
+        from app.core.presets import save_preset
+
+        dialog_cls = getattr(self, "_preset_input_dialog", None)
+        if dialog_cls is None:
+            return
+        name, ok = dialog_cls.getText(
+            self, "Save preset", "Preset name:"
+        )
+        if not ok or not name:
+            return
+        options = self._options()
+        # Drop the auto-injected category since loading replays it.
+        options.pop("category", None)
+        try:
+            save_preset(self.config.kind, name.strip(), options)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Invalid Name", str(exc))
+            return
+        self._refresh_presets()
+        idx = self.preset_combo.findText(name.strip())
+        if idx >= 0:
+            self.preset_combo.setCurrentIndex(idx)
+
+    def _delete_selected_preset(self) -> None:
+        from app.core.presets import delete_preset
+
+        name = self.preset_combo.currentData()
+        if not name:
+            return
+        confirm = QMessageBox.question(
+            self,
+            "Delete Preset",
+            f"Delete preset '{name}'?",
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        delete_preset(self.config.kind, str(name))
+        self._refresh_presets()
+
+    # ---- Drag & drop -----------------------------------------------------
+
+    def dragEnterEvent(self, event) -> None:
+        mime = event.mimeData()
+        if mime is not None and mime.hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event) -> None:
+        mime = event.mimeData()
+        if mime is not None and mime.hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:
+        mime = event.mimeData()
+        if mime is None or not mime.hasUrls():
+            event.ignore()
+            return
+        paths: list[Path] = []
+        for url in mime.urls():
+            local = url.toLocalFile()
+            if local:
+                paths.append(Path(local))
+        if not paths:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self._accept_paths(paths)
 
 
 def _get_open_file_name(parent: QWidget, title: str, file_filter: str) -> str:

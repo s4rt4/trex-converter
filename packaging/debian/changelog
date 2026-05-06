@@ -1,0 +1,15 @@
+t-rex-converter (0.4.0-1) unstable; urgency=medium
+
+  * Initial Debian packaging release with full module surface:
+    Image (ImageMagick), Video / Audio (FFmpeg), Document (LibreOffice),
+    PDF Tools (PyMuPDF + qpdf + pdf2docx), Subtitle (Python parser),
+    OCR (Tesseract), Archive (Python stdlib), QR (qrencode + zbarimg),
+    SVG / Vector (Inkscape + potrace), Ebook (Pandoc), Metadata
+    (exiftool).
+  * Recommends pulls in the optional engine binaries used by SVG,
+    Ebook, Metadata, and QR modules.
+  * postinst warns about any missing system engine and points at the
+    pip install command for the three Python deps not packaged in
+    Debian apt (PyMuPDF, qasync, pdf2docx).
+
+ -- T-Rex Converter Maintainers <maintainers@example.invalid>  Wed, 06 May 2026 16:00:00 +0700

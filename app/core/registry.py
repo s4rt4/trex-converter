@@ -23,6 +23,10 @@ from app.engines.ocr_engine import (
     SUPPORTED_PAIRS as OCR_PAIRS,
     TesseractOCREngine,
 )
+from app.engines.exiftool_engine import (
+    ExifToolEngine,
+    SUPPORTED_PAIRS as EXIFTOOL_PAIRS,
+)
 from app.engines.pandoc_engine import (
     PandocEngine,
     SUPPORTED_PAIRS as PANDOC_PAIRS,
@@ -147,6 +151,10 @@ def default_entries() -> list[RegistryEntry]:
         (format_in, format_out, "pandoc", PandocEngine)
         for format_in, format_out in sorted(PANDOC_PAIRS)
     ]
+    exiftool_pairs = [
+        (format_in, format_out, "exiftool", ExifToolEngine)
+        for format_in, format_out in sorted(EXIFTOOL_PAIRS)
+    ]
     mapping: list[tuple[str, str, str, type[BaseEngine]]] = [
         *[
             ("pdf", format_out, "pdf", PDFEngine)
@@ -156,7 +164,7 @@ def default_entries() -> list[RegistryEntry]:
         ("pdf", "txt", "pdf", PDFEngine),
         ("pdf", "html", "pdf", PDFEngine),
         ("pdf", "folder", "pdf", PDFEngine),
-    ] + ffmpeg_pairs + document_pairs + image_pairs + ocr_pairs + subtitle_pairs + archive_pairs + qr_pairs + inkscape_pairs + pandoc_pairs
+    ] + ffmpeg_pairs + document_pairs + image_pairs + ocr_pairs + subtitle_pairs + archive_pairs + qr_pairs + inkscape_pairs + pandoc_pairs + exiftool_pairs
     return [
         RegistryEntry(
             format_in=normalize_format(format_in),
