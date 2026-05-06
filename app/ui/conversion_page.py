@@ -501,6 +501,8 @@ class ConversionPage(QWidget):
             return output in {"png", "svg", "txt"}
         if self.config.kind == "svg":
             return output in {"png", "pdf", "svg", "eps", "ps", "emf", "wmf", "dxf"}
+        if self.config.kind == "subtitle-extract":
+            return output in {"srt", "ass", "vtt"}
         return True
 
 

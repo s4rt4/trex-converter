@@ -285,6 +285,14 @@ PAGE_CONFIGS = (
         force_engine=True,
         extra_options_factory=SVGOptionsPanel,
     ),
+    ConversionPageConfig(
+        title="Subtitle Extract",
+        input_formats=("mkv", "mp4", "mov", "webm"),
+        default_output="srt",
+        engine_name="ffmpeg",
+        kind="subtitle-extract",
+        force_engine=True,
+    ),
 )
 
 
@@ -433,6 +441,15 @@ class MainWindow(QMainWindow):
             f"{name}: {'OK' if status.available else 'missing'}"
             for name, status in statuses.items()
         ]
+
+        accels = _detect_hwaccels_sync()
+        if accels:
+            lines.append("")
+            lines.append("FFmpeg hardware accel: " + ", ".join(accels))
+        else:
+            lines.append("")
+            lines.append("FFmpeg hardware accel: none detected")
+
         QMessageBox.information(self, "Dependencies", "\n".join(lines))
 
     def _retry_task(self, task_id: str) -> None:
@@ -950,6 +967,36 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
+def _detect_hwaccels_sync() -> list[str]:
+    """Synchronous wrapper around `ffmpeg -hwaccels`.
+
+    Used from GUI handlers that don't have an event loop available.
+    """
+    import shutil
+    import subprocess
+
+    if shutil.which("ffmpeg") is None:
+        return []
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-hwaccels"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return []
+    if result.returncode != 0:
+        return []
+    accels: list[str] = []
+    for line in result.stdout.splitlines():
+        token = line.strip()
+        if not token or ":" in token:
+            continue
+        accels.append(token)
+    return accels
+
+
 def _page_icon(kind: str):
     icons = {
         "image": "fa5s.image",
@@ -977,5 +1024,6 @@ def _page_icon(kind: str):
         "archive-compress": "fa5s.compress",
         "qr": "fa5s.qrcode",
         "svg": "fa5s.bezier-curve",
+        "subtitle-extract": "fa5s.closed-captioning",
     }
     return nav_icon(icons.get(kind, "fa5s.file"))

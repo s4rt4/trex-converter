@@ -99,9 +99,14 @@ class VideoOptionsPanel(QWidget):
         self.trim_start_input.setPlaceholderText("00:00:10 (empty = from start)")
         self.trim_end_input = QLineEdit(page)
         self.trim_end_input.setPlaceholderText("00:01:30 (empty = until end)")
+        self.stream_copy_check = QCheckBox(
+            "Stream copy (no re-encode — fastest, may misalign on non-keyframe cuts)",
+            page,
+        )
 
         info = QLabel(
-            "Use HH:MM:SS or seconds. Trim re-encodes the cut region.",
+            "Use HH:MM:SS or seconds. Trim re-encodes the cut region by default. "
+            "Enable stream copy to skip transcoding (filters/CRF will be ignored).",
             page,
         )
         info.setWordWrap(True)
@@ -110,7 +115,8 @@ class VideoOptionsPanel(QWidget):
         grid.addWidget(self.trim_start_input, 0, 1)
         grid.addWidget(_field("End", page), 1, 0)
         grid.addWidget(self.trim_end_input, 1, 1)
-        grid.addWidget(info, 2, 0, 1, 2)
+        grid.addWidget(self.stream_copy_check, 2, 0, 1, 2)
+        grid.addWidget(info, 3, 0, 1, 2)
         return page
 
     def _build_transform_page(self, parent: QWidget) -> QWidget:
@@ -174,9 +180,18 @@ class VideoOptionsPanel(QWidget):
                 self.compress_preset_combo.setCurrentIndex(index)
                 break
 
+        self.target_size_input = QDoubleSpinBox(page)
+        self.target_size_input.setRange(0.0, 102400.0)
+        self.target_size_input.setDecimals(1)
+        self.target_size_input.setSingleStep(5.0)
+        self.target_size_input.setSuffix(" MB")
+        self.target_size_input.setSpecialValueText("off")
+        _use_stepper(self.target_size_input)
+
         info = QLabel(
             "CRF 0 = disabled, 18 ≈ visually lossless, 23 default, 28 small file. "
-            "Forces libx264 when set on a non-audio output.",
+            "Target size triggers two-pass encode (probes duration via ffprobe, "
+            "computes bitrate). Target overrides CRF.",
             page,
         )
         info.setWordWrap(True)
@@ -185,6 +200,8 @@ class VideoOptionsPanel(QWidget):
         grid.addLayout(_slider_row(self.crf_slider, self.crf_label), 0, 1, 1, 3)
         grid.addWidget(_field("Preset", page), 1, 0)
         grid.addWidget(self.compress_preset_combo, 1, 1)
+        grid.addWidget(_field("Target size", page), 1, 2)
+        grid.addWidget(self.target_size_input, 1, 3)
         grid.addWidget(info, 2, 0, 1, 4)
         return page
 
@@ -445,6 +462,8 @@ class VideoOptionsPanel(QWidget):
         end = self.trim_end_input.text().strip()
         if end:
             options["trim_end"] = end
+        if self.stream_copy_check.isChecked():
+            options["stream_copy"] = True
 
         rotation = self.rotate_combo.currentData()
         if rotation:
@@ -468,6 +487,13 @@ class VideoOptionsPanel(QWidget):
         crf = self.crf_slider.value()
         if crf > 0:
             options["crf"] = crf
+            preset = self.compress_preset_combo.currentData()
+            if preset:
+                options["compress_preset"] = preset
+
+        target_size = round(self.target_size_input.value(), 1)
+        if target_size > 0.0:
+            options["target_size_mb"] = target_size
             preset = self.compress_preset_combo.currentData()
             if preset:
                 options["compress_preset"] = preset

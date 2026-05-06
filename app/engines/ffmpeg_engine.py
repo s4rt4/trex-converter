@@ -12,6 +12,8 @@ VIDEO_FORMATS = ("mp4", "mov", "webm", "mkv")
 AUDIO_FORMATS = ("mp3", "wav", "aac", "flac", "m4a", "opus", "ogg")
 ANIMATED_OUTPUT_FORMATS = ("gif", "webp")
 IMAGE_OUTPUT_FORMATS = ("png", "jpg", "jpeg")
+SUBTITLE_EXTRACT_INPUT_FORMATS = ("mkv", "mp4", "mov", "webm")
+SUBTITLE_EXTRACT_OUTPUT_FORMATS = ("srt", "ass", "vtt")
 
 SUPPORTED_PAIRS = (
     {(fmt_in, fmt_out) for fmt_in in VIDEO_FORMATS for fmt_out in VIDEO_FORMATS}
@@ -19,7 +21,19 @@ SUPPORTED_PAIRS = (
     | {(fmt_in, fmt_out) for fmt_in in AUDIO_FORMATS for fmt_out in AUDIO_FORMATS}
     | {(fmt_in, fmt_out) for fmt_in in VIDEO_FORMATS for fmt_out in ANIMATED_OUTPUT_FORMATS}
     | {(fmt_in, fmt_out) for fmt_in in VIDEO_FORMATS for fmt_out in IMAGE_OUTPUT_FORMATS}
+    | {
+        (fmt_in, fmt_out)
+        for fmt_in in SUBTITLE_EXTRACT_INPUT_FORMATS
+        for fmt_out in SUBTITLE_EXTRACT_OUTPUT_FORMATS
+    }
 )
+
+SUBTITLE_EXTRACT_OUTPUT_SET = set(SUBTITLE_EXTRACT_OUTPUT_FORMATS)
+SUBTITLE_CODEC_FOR_FORMAT = {
+    "srt": "srt",
+    "ass": "ass",
+    "vtt": "webvtt",
+}
 
 RESOLUTION_PRESETS = {
     "4k": "3840:-2",
@@ -82,7 +96,14 @@ class FFmpegEngine(BaseEngine):
         self._processes: dict[str, asyncio.subprocess.Process] = {}
 
     async def convert(self, task: Task) -> None:
+        if _should_run_two_pass(task):
+            await self._run_two_pass(task)
+            return
+
         command = self._build_command(task)
+        await self._run_with_progress(command, task)
+
+    async def _run_with_progress(self, command: list[str], task: Task) -> None:
         task.append_log("Running: " + " ".join(command))
         process = await asyncio.create_subprocess_exec(
             *command,
@@ -119,6 +140,38 @@ class FFmpegEngine(BaseEngine):
         finally:
             self._processes.pop(task.id, None)
 
+    async def _run_two_pass(self, task: Task) -> None:
+        target_mb = _float_option(task.options.get("target_size_mb"))
+        if target_mb is None or target_mb <= 0:
+            raise RuntimeError("target_size_mb must be a positive number")
+
+        duration = await _probe_duration_seconds(Path(task.input_path))
+        if duration is None or duration <= 0:
+            raise RuntimeError(
+                "Two-pass compress could not determine input duration via ffprobe"
+            )
+
+        audio_kbps = _int_option(task.options.get("two_pass_audio_kbps")) or 128
+        video_kbps = _compute_two_pass_video_kbps(target_mb, duration, audio_kbps)
+        if video_kbps <= 0:
+            raise RuntimeError(
+                f"target_size_mb={target_mb} too small for duration {duration:.1f}s "
+                f"with audio {audio_kbps}kbps"
+            )
+
+        task.append_log(
+            f"Two-pass: duration={duration:.2f}s "
+            f"video_bitrate={video_kbps}k audio_bitrate={audio_kbps}k"
+        )
+
+        pass1 = _build_two_pass_command(task, video_kbps, audio_kbps, pass_index=1)
+        await self._run_with_progress(pass1, task)
+        # Pass 1 finishes at 100%; reset progress for pass 2 visibility.
+        task.progress = 0.0
+
+        pass2 = _build_two_pass_command(task, video_kbps, audio_kbps, pass_index=2)
+        await self._run_with_progress(pass2, task)
+
     async def cancel(self, task: Task) -> None:
         process = self._processes.get(task.id)
         if process and process.returncode is None:
@@ -148,6 +201,9 @@ class FFmpegEngine(BaseEngine):
         if operation == "mix":
             return _build_mix_command(task, output_path)
 
+        if fmt_out in SUBTITLE_EXTRACT_OUTPUT_SET:
+            return _build_subtitle_extract_command(task, output_path)
+
         if fmt_out == "gif":
             return _build_gif_command(task, output_path)
 
@@ -156,6 +212,12 @@ class FFmpegEngine(BaseEngine):
         is_animated_image = fmt_out == "webp"
         use_logo = bool(options.get("logo_path")) and not is_audio_only and not is_image_only
         cover_art_path = options.get("cover_art_path") if is_audio_only else None
+        stream_copy = (
+            _bool_option(options.get("stream_copy"))
+            and not is_image_only
+            and not is_animated_image
+            and not use_logo
+        )
 
         command = ["ffmpeg", "-y", "-i", str(task.input_path)]
         if use_logo:
@@ -169,6 +231,12 @@ class FFmpegEngine(BaseEngine):
 
         if is_animated_image:
             return _finish_webp_command(command, options, output_path)
+
+        if stream_copy:
+            command.extend(["-c", "copy"])
+            command.extend(_metadata_options(options))
+            command.extend(["-progress", "pipe:2", "-nostats", str(output_path)])
+            return command
 
         if use_logo:
             command.extend(["-filter_complex", _logo_filter_complex(options)])
@@ -388,6 +456,156 @@ def _logo_filter_complex(options: dict) -> str:
     parts.append(f"{v_in}[logo]overlay={GRAVITY_OVERLAY_POS[gravity]}[vout]")
 
     return ";".join(parts)
+
+
+def _build_subtitle_extract_command(task: Task, output_path: Path) -> list[str]:
+    fmt_out = task.format_out.lower()
+    codec = SUBTITLE_CODEC_FOR_FORMAT.get(fmt_out)
+    if codec is None:
+        raise RuntimeError(f"Unknown subtitle output format: {fmt_out}")
+
+    options = task.options
+    stream_index = _int_option(options.get("subtitle_stream_index"))
+    if stream_index is None:
+        stream_index = 0
+    if stream_index < 0:
+        raise RuntimeError(
+            f"subtitle_stream_index must be >= 0, got {stream_index}"
+        )
+
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(task.input_path),
+        "-map",
+        f"0:s:{stream_index}",
+        "-c:s",
+        codec,
+        str(output_path),
+    ]
+    return command
+
+
+def _should_run_two_pass(task: Task) -> bool:
+    if task.format_out.lower() not in set(VIDEO_FORMATS):
+        return False
+    target = _float_option(task.options.get("target_size_mb"))
+    return target is not None and target > 0
+
+
+def _compute_two_pass_video_kbps(
+    target_mb: float, duration_seconds: float, audio_kbps: int
+) -> int:
+    target_kilobits = target_mb * 8192.0  # MiB → kibibits ~ kbps*duration
+    audio_kilobits = audio_kbps * duration_seconds
+    video_kilobits = target_kilobits - audio_kilobits
+    if video_kilobits <= 0:
+        return 0
+    return max(1, int(video_kilobits / duration_seconds))
+
+
+def _build_two_pass_command(
+    task: Task, video_kbps: int, audio_kbps: int, *, pass_index: int
+) -> list[str]:
+    if pass_index not in (1, 2):
+        raise RuntimeError(f"pass_index must be 1 or 2, got {pass_index}")
+
+    options = task.options
+    output_path = Path(task.output_path)
+    log_prefix = options.get("two_pass_log_prefix") or str(
+        output_path.with_suffix("").as_posix()
+    )
+
+    command = ["ffmpeg", "-y", "-i", str(task.input_path)]
+    command.extend(_trim_options(options))
+    video_filter = _video_filter_chain(options)
+    if video_filter:
+        command.extend(["-vf", video_filter])
+
+    command.extend([
+        "-c:v",
+        str(options.get("video_codec") or "libx264"),
+        "-b:v",
+        f"{video_kbps}k",
+        "-pass",
+        str(pass_index),
+        "-passlogfile",
+        log_prefix,
+    ])
+
+    preset = options.get("compress_preset")
+    if preset:
+        if str(preset).lower() not in COMPRESS_PRESETS:
+            raise RuntimeError(f"Unknown compress preset: {preset}")
+        command.extend(["-preset", str(preset).lower()])
+
+    if pass_index == 1:
+        command.extend(["-an", "-f", "null", "-progress", "pipe:2", "-nostats", "/dev/null"])
+    else:
+        audio_filter = _audio_filter_chain(options, drop_audio=False)
+        if audio_filter:
+            command.extend(["-af", audio_filter])
+        command.extend([
+            "-c:a",
+            str(options.get("audio_codec") or "aac"),
+            "-b:a",
+            f"{audio_kbps}k",
+        ])
+        command.extend(_metadata_options(options))
+        command.extend(["-progress", "pipe:2", "-nostats", str(output_path)])
+
+    return command
+
+
+async def _probe_duration_seconds(input_path: Path) -> float | None:
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(input_path),
+    ]
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout_bytes, _ = await process.communicate()
+    if process.returncode != 0:
+        return None
+    text = stdout_bytes.decode("utf-8", errors="replace").strip()
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+async def detect_hardware_accels() -> list[str]:
+    """Return ffmpeg's list of supported hardware acceleration methods."""
+    cmd = ["ffmpeg", "-hide_banner", "-hwaccels"]
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except FileNotFoundError:
+        return []
+    stdout_bytes, _ = await process.communicate()
+    if process.returncode != 0:
+        return []
+    accels: list[str] = []
+    for line in stdout_bytes.decode("utf-8", errors="replace").splitlines():
+        token = line.strip()
+        if not token or ":" in token:
+            # Skip the "Hardware acceleration methods:" header.
+            continue
+        accels.append(token)
+    return accels
 
 
 def _build_concat_command(task: Task, output_path: Path) -> list[str]:
@@ -662,3 +880,13 @@ def _float_option(value: object) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _bool_option(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return False

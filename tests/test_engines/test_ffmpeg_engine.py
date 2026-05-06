@@ -839,3 +839,200 @@ def test_cover_art_does_not_clobber_audio_filters() -> None:
     assert af == "volume=+3dB"
     metadata = [command[i + 1] for i, arg in enumerate(command) if arg == "-metadata"]
     assert "title=Hi" in metadata
+
+
+# ---- Stream-copy trim (Wave 3) ----
+
+
+def test_stream_copy_emits_c_copy_and_skips_filters() -> None:
+    command = _build(
+        {"stream_copy": True, "trim_start": "00:00:05", "trim_end": "00:00:20"},
+        format_in="mp4",
+        format_out="mp4",
+    )
+
+    assert command[command.index("-c") + 1] == "copy"
+    assert "-vf" not in command
+    assert "-af" not in command
+    assert command[command.index("-ss") + 1] == "00:00:05"
+    assert command[command.index("-to") + 1] == "00:00:20"
+
+
+def test_stream_copy_ignored_for_image_output() -> None:
+    command = _build(
+        {"stream_copy": True},
+        format_in="mp4",
+        format_out="png",
+    )
+
+    # Image output goes through _finish_image_command and ignores stream copy.
+    assert "-c" not in command or command[command.index("-c") + 1] != "copy"
+
+
+def test_stream_copy_off_uses_normal_filter_chain() -> None:
+    command = _build(
+        {"resolution_preset": "1080p"},
+        format_in="mp4",
+        format_out="mp4",
+    )
+
+    assert "-vf" in command
+    # No -c copy when stream_copy isn't set
+    if "-c" in command:
+        assert command[command.index("-c") + 1] != "copy"
+
+
+# ---- Subtitle extract (Wave 3) ----
+
+
+def test_supports_includes_subtitle_extract_pairs() -> None:
+    engine = FFmpegEngine()
+
+    assert engine.supports("mkv", "srt")
+    assert engine.supports("mkv", "ass")
+    assert engine.supports("mkv", "vtt")
+    assert engine.supports("mp4", "srt")
+
+
+def test_subtitle_extract_command_uses_map_and_codec() -> None:
+    command = _build({}, format_in="mkv", format_out="srt")
+
+    assert command[0] == "ffmpeg"
+    assert command[command.index("-map") + 1] == "0:s:0"
+    assert command[command.index("-c:s") + 1] == "srt"
+    assert command[-1] == "out.srt"
+
+
+def test_subtitle_extract_codec_mapping_for_ass_and_vtt() -> None:
+    ass = _build({}, format_in="mkv", format_out="ass")
+    vtt = _build({}, format_in="mkv", format_out="vtt")
+
+    assert ass[ass.index("-c:s") + 1] == "ass"
+    assert vtt[vtt.index("-c:s") + 1] == "webvtt"
+
+
+def test_subtitle_extract_honors_stream_index_option() -> None:
+    command = _build(
+        {"subtitle_stream_index": 2},
+        format_in="mkv",
+        format_out="srt",
+    )
+
+    assert command[command.index("-map") + 1] == "0:s:2"
+
+
+def test_subtitle_extract_negative_stream_rejected() -> None:
+    with pytest.raises(RuntimeError, match="subtitle_stream_index"):
+        _build(
+            {"subtitle_stream_index": -1},
+            format_in="mkv",
+            format_out="srt",
+        )
+
+
+# ---- Two-pass target-size (Wave 3) ----
+
+
+def test_compute_two_pass_video_kbps_subtracts_audio() -> None:
+    from app.engines.ffmpeg_engine import _compute_two_pass_video_kbps
+
+    # 50 MB target, 300s duration, 128 kbps audio
+    # → ~1237 kbps video (verified empirically against the formula)
+    kbps = _compute_two_pass_video_kbps(50.0, 300.0, 128)
+    assert 1100 < kbps < 1400
+
+
+def test_compute_two_pass_video_kbps_returns_zero_when_too_small() -> None:
+    from app.engines.ffmpeg_engine import _compute_two_pass_video_kbps
+
+    # 1 MB / 300s with 128 kbps audio → audio alone exceeds budget
+    assert _compute_two_pass_video_kbps(1.0, 300.0, 128) == 0
+
+
+def test_two_pass_command_pass1_writes_to_devnull_and_disables_audio() -> None:
+    from app.engines.ffmpeg_engine import _build_two_pass_command
+
+    task = Task(
+        input_path=Path("in.mp4"),
+        output_path=Path("out.mp4"),
+        format_in="mp4",
+        format_out="mp4",
+        engine="ffmpeg",
+        options={"target_size_mb": 50},
+    )
+    cmd = _build_two_pass_command(task, video_kbps=1200, audio_kbps=128, pass_index=1)
+
+    assert "-pass" in cmd and cmd[cmd.index("-pass") + 1] == "1"
+    assert "-an" in cmd
+    assert "/dev/null" in cmd
+    assert cmd[cmd.index("-b:v") + 1] == "1200k"
+
+
+def test_two_pass_command_pass2_writes_output_with_audio() -> None:
+    from app.engines.ffmpeg_engine import _build_two_pass_command
+
+    task = Task(
+        input_path=Path("in.mp4"),
+        output_path=Path("out.mp4"),
+        format_in="mp4",
+        format_out="mp4",
+        engine="ffmpeg",
+        options={"target_size_mb": 50},
+    )
+    cmd = _build_two_pass_command(task, video_kbps=1200, audio_kbps=128, pass_index=2)
+
+    assert cmd[cmd.index("-pass") + 1] == "2"
+    assert "-an" not in cmd
+    assert cmd[cmd.index("-b:a") + 1] == "128k"
+    assert cmd[-1] == "out.mp4"
+
+
+def test_two_pass_command_invalid_pass_index_raises() -> None:
+    from app.engines.ffmpeg_engine import _build_two_pass_command
+
+    task = Task(
+        input_path=Path("in.mp4"),
+        output_path=Path("out.mp4"),
+        format_in="mp4",
+        format_out="mp4",
+        engine="ffmpeg",
+    )
+    with pytest.raises(RuntimeError, match="pass_index"):
+        _build_two_pass_command(task, 1000, 128, pass_index=3)
+
+
+# ---- Hardware accel detect (Wave 3) ----
+
+
+@pytest.mark.asyncio
+async def test_detect_hardware_accels_parses_ffmpeg_output(tmp_path, monkeypatch) -> None:
+    fake_ffmpeg = tmp_path / "ffmpeg"
+    fake_ffmpeg.write_text(
+        "#!/bin/sh\n"
+        "echo 'Hardware acceleration methods:'\n"
+        "echo 'vaapi'\n"
+        "echo 'cuda'\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_ffmpeg.chmod(0o755)
+    import os as _os
+    monkeypatch.setenv("PATH", f"{tmp_path}:{_os.environ.get('PATH', '')}")
+
+    from app.engines.ffmpeg_engine import detect_hardware_accels
+    accels = await detect_hardware_accels()
+
+    assert "vaapi" in accels
+    assert "cuda" in accels
+    assert all(":" not in a for a in accels)
+
+
+def test_bool_option_helper_accepts_strings_and_numbers() -> None:
+    from app.engines.ffmpeg_engine import _bool_option
+
+    assert _bool_option(True) is True
+    assert _bool_option(False) is False
+    assert _bool_option("yes") is True
+    assert _bool_option("0") is False
+    assert _bool_option(1) is True
+    assert _bool_option(None) is False
