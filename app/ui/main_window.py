@@ -344,10 +344,11 @@ class MainWindow(QMainWindow):
         self.registry = ConversionRegistry()
         from app.core.settings import get_settings as _get_settings
 
+        self.repository = TaskRepository()
         self.queue = TaskQueue(
             self.registry.resolve,
             max_concurrency=max(1, _get_settings().max_concurrency),
-            repository=TaskRepository(),
+            repository=self.repository,
             resume_pending=True,
             engine_by_name=self.registry.engine_by_name,
         )
@@ -373,6 +374,7 @@ class MainWindow(QMainWindow):
         dashboard = DashboardPage(
             on_cancel=self.queue.cancel,
             on_retry=self._retry_task,
+            repository=self.repository,
             parent=self.stack,
         )
         self.task_views.append(dashboard)
@@ -547,29 +549,41 @@ class MainWindow(QMainWindow):
             #SidebarNav::item:hover {
                 background: rgba(239, 227, 202, 24);
             }
-            #SidebarNav QScrollBar:vertical {
+            #SidebarNav QScrollBar:vertical,
+            #ConvertScroll QScrollBar:vertical {
                 background: transparent;
-                width: 6px;
+                width: 8px;
                 margin: 4px 2px;
                 border: 0;
             }
-            #SidebarNav QScrollBar::handle:vertical {
+            #SidebarNav QScrollBar::handle:vertical,
+            #ConvertScroll QScrollBar::handle:vertical {
                 background: rgba(86, 182, 198, 64);
                 border-radius: 3px;
                 min-height: 24px;
             }
-            #SidebarNav QScrollBar::handle:vertical:hover {
+            #SidebarNav QScrollBar::handle:vertical:hover,
+            #ConvertScroll QScrollBar::handle:vertical:hover {
                 background: rgba(86, 182, 198, 140);
             }
             #SidebarNav QScrollBar::add-line:vertical,
-            #SidebarNav QScrollBar::sub-line:vertical {
+            #SidebarNav QScrollBar::sub-line:vertical,
+            #ConvertScroll QScrollBar::add-line:vertical,
+            #ConvertScroll QScrollBar::sub-line:vertical {
                 background: transparent;
                 height: 0;
                 border: 0;
             }
             #SidebarNav QScrollBar::add-page:vertical,
-            #SidebarNav QScrollBar::sub-page:vertical {
+            #SidebarNav QScrollBar::sub-page:vertical,
+            #ConvertScroll QScrollBar::add-page:vertical,
+            #ConvertScroll QScrollBar::sub-page:vertical {
                 background: transparent;
+            }
+            #ConvertScroll,
+            #ConvertScrollContent {
+                background: transparent;
+                border: 0;
             }
             #Sidebar QPushButton {
                 background: rgba(36, 21, 143, 128);
@@ -614,6 +628,38 @@ class MainWindow(QMainWindow):
             #AboutDescription {
                 color: $BRAND_DARK_SOFT;
                 font-size: 12px;
+            }
+            #EngineStatusCard {
+                background: rgba(228, 215, 189, 80);
+                border: 1px solid rgba(86, 182, 198, 100);
+                border-radius: 6px;
+            }
+            #EngineStatusName {
+                color: $BRAND_DARK;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            #EngineStatusModule {
+                color: $BRAND_DARK_SOFT;
+                font-size: 11px;
+            }
+            #EngineStatusOk {
+                color: #1f7a3d;
+                font-size: 11px;
+                font-weight: 700;
+            }
+            #EngineStatusMissing {
+                color: #b1382e;
+                font-size: 11px;
+                font-weight: 700;
+            }
+            #EngineStatusPending {
+                color: $BRAND_DARK_SOFT;
+                font-size: 11px;
+            }
+            #HintLabel {
+                color: $BRAND_DARK_SOFT;
+                font-size: 11px;
             }
             #AboutName {
                 color: $BRAND_TEXT;
@@ -714,7 +760,8 @@ class MainWindow(QMainWindow):
             #PDFOperationsTabs::pane,
             #VideoOptionsTabs::pane,
             #AudioOptionsTabs::pane,
-            #SVGOptionsTabs::pane {
+            #SVGOptionsTabs::pane,
+            #DashboardTabs::pane {
                 background: $BRAND_SURFACE_SOFT;
                 border: 1px solid rgba(86, 182, 198, 145);
                 border-radius: 8px;
@@ -724,7 +771,8 @@ class MainWindow(QMainWindow):
             #PDFOperationsTabs QTabBar,
             #VideoOptionsTabs QTabBar,
             #AudioOptionsTabs QTabBar,
-            #SVGOptionsTabs QTabBar {
+            #SVGOptionsTabs QTabBar,
+            #DashboardTabs QTabBar {
                 background: transparent;
                 border: 0;
             }
@@ -732,7 +780,8 @@ class MainWindow(QMainWindow):
             #PDFOperationsTabs QTabBar::tab,
             #VideoOptionsTabs QTabBar::tab,
             #AudioOptionsTabs QTabBar::tab,
-            #SVGOptionsTabs QTabBar::tab {
+            #SVGOptionsTabs QTabBar::tab,
+            #DashboardTabs QTabBar::tab {
                 background: rgba(228, 215, 189, 150);
                 color: $BRAND_DARK;
                 border: 1px solid rgba(86, 182, 198, 145);
@@ -745,7 +794,8 @@ class MainWindow(QMainWindow):
             #PDFOperationsTabs QTabBar::tab:selected,
             #VideoOptionsTabs QTabBar::tab:selected,
             #AudioOptionsTabs QTabBar::tab:selected,
-            #SVGOptionsTabs QTabBar::tab:selected {
+            #SVGOptionsTabs QTabBar::tab:selected,
+            #DashboardTabs QTabBar::tab:selected {
                 background: $BRAND_DARK;
                 color: $BRAND_ACCENT;
                 border: 1px solid $BRAND_DARK;
@@ -754,7 +804,8 @@ class MainWindow(QMainWindow):
             #PDFOperationsTabs QTabBar::tab:hover:!selected,
             #VideoOptionsTabs QTabBar::tab:hover:!selected,
             #AudioOptionsTabs QTabBar::tab:hover:!selected,
-            #SVGOptionsTabs QTabBar::tab:hover:!selected {
+            #SVGOptionsTabs QTabBar::tab:hover:!selected,
+            #DashboardTabs QTabBar::tab:hover:!selected {
                 background: $BRAND_SURFACE_SOFT;
             }
             #ImageOptionsPanel QWidget,

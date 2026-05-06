@@ -15,6 +15,10 @@ class Settings:
     max_concurrency: int = 2
     default_image_quality: int = 82
     default_pdf_dpi: int = 200
+    default_ocr_language: str = "eng"
+    default_video_crf: int = 0
+    default_video_preset: str = "medium"
+    default_audio_bitrate: str = "192k"
 
     @classmethod
     def load(cls, path: Path = SETTINGS_PATH) -> "Settings":

@@ -91,6 +91,37 @@ class TaskRepository:
             row = connection.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         return task_from_row(row) if row else None
 
+    def count_by_period(self, granularity: str) -> list[tuple[str, int]]:
+        """Return [(bucket_label, count), …] grouped by ``granularity``.
+
+        ``granularity`` must be one of: ``"day"``, ``"week"``, ``"month"``,
+        ``"year"``. Buckets are SQLite ``strftime`` formats so the labels are
+        ISO-friendly and lex-sortable. Empty bucket names (rows whose
+        ``created_at`` is somehow null) are dropped.
+        """
+        formats = {
+            "day": "%Y-%m-%d",
+            "week": "%Y-W%W",
+            "month": "%Y-%m",
+            "year": "%Y",
+        }
+        if granularity not in formats:
+            raise ValueError(
+                f"granularity must be one of {sorted(formats)}, got {granularity!r}"
+            )
+        fmt = formats[granularity]
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT strftime(?, created_at) AS bucket, COUNT(*) AS count
+                FROM tasks
+                GROUP BY bucket
+                ORDER BY bucket ASC
+                """,
+                (fmt,),
+            ).fetchall()
+        return [(row["bucket"], int(row["count"])) for row in rows if row["bucket"]]
+
     def pending_for_resume(self) -> list[Task]:
         with self._connect() as connection:
             rows = connection.execute(

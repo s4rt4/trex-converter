@@ -26,6 +26,7 @@ try:
         QListWidgetItem,
         QMessageBox,
         QPushButton,
+        QScrollArea,
         QSlider,
         QTabWidget,
         QToolButton,
@@ -34,7 +35,7 @@ try:
     )
 except ImportError:  # pragma: no cover
     Qt = None
-    QCheckBox = QComboBox = QFileDialog = QFrame = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QListWidget = QListWidgetItem = QMessageBox = QPushButton = QSlider = QTabWidget = QToolButton = QVBoxLayout = QWidget = None
+    QCheckBox = QComboBox = QFileDialog = QFrame = QGridLayout = QHBoxLayout = QLabel = QLineEdit = QListView = QListWidget = QListWidgetItem = QMessageBox = QPushButton = QScrollArea = QSlider = QTabWidget = QToolButton = QVBoxLayout = QWidget = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,11 +97,27 @@ class ConversionPage(QWidget):
         root.addWidget(self.page_tabs, 1)
 
         convert_tab = QWidget(self.page_tabs)
-        convert_layout = QVBoxLayout(convert_tab)
+        convert_tab_layout = QVBoxLayout(convert_tab)
+        convert_tab_layout.setContentsMargins(0, 0, 0, 0)
+        convert_tab_layout.setSpacing(0)
+
+        # Wrap the convert form in a scroll area so the bottom controls
+        # (preset row, Add to Queue, etc.) remain reachable on short screens.
+        scroll = QScrollArea(convert_tab)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setObjectName("ConvertScroll")
+        convert_tab_layout.addWidget(scroll)
+
+        scroll_content = QWidget(scroll)
+        scroll_content.setObjectName("ConvertScrollContent")
+        convert_layout = QVBoxLayout(scroll_content)
         convert_layout.setContentsMargins(0, 18, 0, 0)
         convert_layout.setSpacing(12)
+        scroll.setWidget(scroll_content)
 
-        form_shell = QFrame(convert_tab)
+        form_shell = QFrame(scroll_content)
         form_shell.setObjectName("ToolPanel")
         form = QGridLayout(form_shell)
         form.setContentsMargins(12, 10, 12, 10)
@@ -236,11 +253,11 @@ class ConversionPage(QWidget):
         convert_layout.addWidget(form_shell)
 
         if config.extra_options_factory is not None:
-            extras = config.extra_options_factory(convert_tab)
+            extras = config.extra_options_factory(scroll_content)
             self.extra_options_widget = extras
             convert_layout.addWidget(extras)
 
-        self._build_preset_row(convert_layout, convert_tab)
+        self._build_preset_row(convert_layout, scroll_content)
 
         convert_layout.addStretch(1)
         self.page_tabs.addTab(convert_tab, "Convert")

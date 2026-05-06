@@ -133,3 +133,78 @@ def test_repository_migrates_legacy_db_without_extra_inputs_column(tmp_path) -> 
     loaded = repository.get(task.id)
     assert loaded is not None
     assert [str(p) for p in loaded.extra_inputs] == ["b.pdf"]
+
+
+def test_count_by_period_groups_tasks_by_day(tmp_path) -> None:
+    import sqlite3
+    repo = TaskRepository(tmp_path / "tasks.sqlite3")
+    # Seed two days with different counts.
+    with sqlite3.connect(repo.db_path) as conn:
+        for created_at, ident in (
+            ("2026-04-30 10:00:00", "a"),
+            ("2026-04-30 12:00:00", "b"),
+            ("2026-05-01 09:00:00", "c"),
+        ):
+            conn.execute(
+                """
+                INSERT INTO tasks (
+                    id, input_path, output_path, format_in, format_out, engine,
+                    options, status, progress, log, error, retries, max_retries,
+                    extra_inputs, created_at, updated_at
+                )
+                VALUES (?, '/in', '/out', 'png', 'jpg', 'imagemagick',
+                    '{}', 'success', 1.0, '[]', NULL, 0, 2,
+                    '[]', ?, ?)
+                """,
+                (ident, created_at, created_at),
+            )
+
+    buckets = repo.count_by_period("day")
+    assert buckets == [("2026-04-30", 2), ("2026-05-01", 1)]
+
+
+def test_count_by_period_supports_month_and_year(tmp_path) -> None:
+    import sqlite3
+    repo = TaskRepository(tmp_path / "tasks.sqlite3")
+    with sqlite3.connect(repo.db_path) as conn:
+        for created_at, ident in (
+            ("2025-12-15 10:00:00", "a"),
+            ("2026-01-10 11:00:00", "b"),
+            ("2026-01-11 11:00:00", "c"),
+            ("2026-02-01 12:00:00", "d"),
+        ):
+            conn.execute(
+                """
+                INSERT INTO tasks (
+                    id, input_path, output_path, format_in, format_out, engine,
+                    options, status, progress, log, error, retries, max_retries,
+                    extra_inputs, created_at, updated_at
+                )
+                VALUES (?, '/in', '/out', 'png', 'jpg', 'imagemagick',
+                    '{}', 'success', 1.0, '[]', NULL, 0, 2,
+                    '[]', ?, ?)
+                """,
+                (ident, created_at, created_at),
+            )
+
+    by_month = repo.count_by_period("month")
+    assert by_month == [
+        ("2025-12", 1),
+        ("2026-01", 2),
+        ("2026-02", 1),
+    ]
+
+    by_year = repo.count_by_period("year")
+    assert by_year == [("2025", 1), ("2026", 3)]
+
+
+def test_count_by_period_invalid_granularity(tmp_path) -> None:
+    import pytest
+    repo = TaskRepository(tmp_path / "tasks.sqlite3")
+    with pytest.raises(ValueError, match="granularity"):
+        repo.count_by_period("decade")
+
+
+def test_count_by_period_returns_empty_for_fresh_db(tmp_path) -> None:
+    repo = TaskRepository(tmp_path / "tasks.sqlite3")
+    assert repo.count_by_period("day") == []

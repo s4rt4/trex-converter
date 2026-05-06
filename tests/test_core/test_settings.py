@@ -43,12 +43,12 @@ def test_settings_save_then_load_round_trip(tmp_path) -> None:
 
     assert loaded == original
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload == {
-        "output_dir": "/tmp/out",
-        "max_concurrency": 4,
-        "default_image_quality": 90,
-        "default_pdf_dpi": 300,
-    }
+    # New default fields land in the JSON too; assert the user-set fields
+    # round-trip exactly without pinning the full dict shape.
+    assert payload["output_dir"] == "/tmp/out"
+    assert payload["max_concurrency"] == 4
+    assert payload["default_image_quality"] == 90
+    assert payload["default_pdf_dpi"] == 300
 
 
 def test_settings_load_ignores_unknown_keys(tmp_path) -> None:
