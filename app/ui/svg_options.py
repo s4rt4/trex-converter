@@ -7,13 +7,14 @@ try:
         QComboBox,
         QGridLayout,
         QLabel,
+        QLineEdit,
         QListView,
         QSpinBox,
         QVBoxLayout,
         QWidget,
     )
 except ImportError:  # pragma: no cover
-    QAbstractSpinBox = QCheckBox = QComboBox = QGridLayout = QLabel = QListView = QSpinBox = QVBoxLayout = QWidget = None
+    QAbstractSpinBox = QCheckBox = QComboBox = QGridLayout = QLabel = QLineEdit = QListView = QSpinBox = QVBoxLayout = QWidget = None
 
 
 SVG_SVG_OPERATIONS = (
@@ -82,6 +83,13 @@ class SVGOptionsPanel(QWidget):
 
         self.text_to_path_check = QCheckBox("Convert text → paths (PDF/EPS/PS/SVG)", self)
 
+        self.export_id_input = QLineEdit(self)
+        self.export_id_input.setPlaceholderText("e.g. logo (leave empty to export full document)")
+
+        self.export_id_only_check = QCheckBox(
+            "Hide other objects (export selected ID only)", self
+        )
+
         info = QLabel(
             "DPI / Width / Height apply when output is PNG. "
             "Width/Height override DPI. SVG operation applies when output is SVG: "
@@ -89,7 +97,8 @@ class SVGOptionsPanel(QWidget):
             "the viewBox to the drawing's bounding box. PS level applies to EPS/PS "
             "output. PDF page applies when input is a PDF (which page to import). "
             "Text → paths embeds outlined glyphs so the output renders without the "
-            "original font installed.",
+            "original font installed. Export ID restricts the output to a single "
+            "object/layer by SVG id.",
             self,
         )
         info.setWordWrap(True)
@@ -107,6 +116,9 @@ class SVGOptionsPanel(QWidget):
         grid.addWidget(_field("PDF page", self), 3, 2)
         grid.addWidget(self.pdf_page_input, 3, 3)
         grid.addWidget(self.text_to_path_check, 4, 0, 1, 4)
+        grid.addWidget(_field("Export ID", self), 5, 0)
+        grid.addWidget(self.export_id_input, 5, 1, 1, 3)
+        grid.addWidget(self.export_id_only_check, 6, 0, 1, 4)
 
         layout.addLayout(grid)
         layout.addWidget(info)
@@ -134,6 +146,11 @@ class SVGOptionsPanel(QWidget):
             options["inkscape_pdf_page"] = page
         if self.text_to_path_check.isChecked():
             options["text_to_path"] = True
+        export_id = self.export_id_input.text().strip()
+        if export_id:
+            options["inkscape_export_id"] = export_id
+            if self.export_id_only_check.isChecked():
+                options["inkscape_export_id_only"] = True
         return options
 
 

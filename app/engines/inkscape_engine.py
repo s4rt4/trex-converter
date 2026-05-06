@@ -118,17 +118,21 @@ def build_command(task: Task) -> list[str]:
     elif format_out == "png":
         command.append("--export-type=png")
         command.extend(_raster_size_args(options))
+        command.extend(_export_id_args(options))
     elif format_out == "pdf":
         command.append("--export-type=pdf")
+        command.extend(_export_id_args(options))
         if _bool_option(options.get("text_to_path")):
             command.append("--export-text-to-path")
     elif format_out in ("eps", "ps"):
         command.append(f"--export-type={format_out}")
         command.extend(_ps_level_args(options))
+        command.extend(_export_id_args(options))
         if _bool_option(options.get("text_to_path")):
             command.append("--export-text-to-path")
     elif format_out in ("emf", "wmf"):
         command.append(f"--export-type={format_out}")
+        command.extend(_export_id_args(options))
     elif format_out == "svg":
         operation = str(options.get("operation") or "cleanup").lower()
         if operation not in SVG_SVG_OPERATIONS:
@@ -141,6 +145,7 @@ def build_command(task: Task) -> list[str]:
         command.append("--vacuum-defs")
         if operation == "trim":
             command.append("--export-area-drawing")
+        command.extend(_export_id_args(options))
         if _bool_option(options.get("text_to_path")):
             command.append("--export-text-to-path")
     else:
@@ -181,6 +186,19 @@ def _ps_level_args(options: dict) -> list[str]:
             f"inkscape_ps_level must be one of {sorted(PS_LEVELS)}, got {level}"
         )
     return [f"--export-ps-level={level}"]
+
+
+def _export_id_args(options: dict) -> list[str]:
+    raw_id = options.get("inkscape_export_id")
+    if raw_id is None:
+        return []
+    export_id = str(raw_id).strip()
+    if not export_id:
+        return []
+    args = [f"--export-id={export_id}"]
+    if _bool_option(options.get("inkscape_export_id_only")):
+        args.append("--export-id-only")
+    return args
 
 
 def _pdf_page_args(options: dict) -> list[str]:

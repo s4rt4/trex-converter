@@ -244,6 +244,49 @@ def test_pdf_to_svg_with_page_option_emits_pages_flag() -> None:
     assert "--pages=3" in command
 
 
+def test_export_id_emits_export_id_flag() -> None:
+    command = _build("png", {"inkscape_export_id": "logo"})
+
+    assert "--export-id=logo" in command
+    assert "--export-id-only" not in command
+
+
+def test_export_id_only_emits_both_flags() -> None:
+    command = _build("png", {
+        "inkscape_export_id": "logo",
+        "inkscape_export_id_only": True,
+    })
+
+    assert "--export-id=logo" in command
+    assert "--export-id-only" in command
+
+
+def test_export_id_only_without_id_omits_both() -> None:
+    # id_only is meaningless without an id; builder should not emit either.
+    command = _build("png", {"inkscape_export_id_only": True})
+
+    assert not any(arg.startswith("--export-id=") for arg in command)
+    assert "--export-id-only" not in command
+
+
+def test_export_id_works_for_pdf_eps_ps_emf_wmf() -> None:
+    for fmt in ("pdf", "eps", "ps", "emf", "wmf"):
+        command = _build(fmt, {"inkscape_export_id": "obj"})
+        assert "--export-id=obj" in command, f"failed for {fmt}"
+
+
+def test_export_id_works_for_svg_cleanup() -> None:
+    command = _build("svg", {"inkscape_export_id": "logo"})
+
+    assert "--export-id=logo" in command
+
+
+def test_export_id_blank_string_is_ignored() -> None:
+    command = _build("png", {"inkscape_export_id": "  "})
+
+    assert not any(arg.startswith("--export-id=") for arg in command)
+
+
 def test_pdf_page_zero_or_negative_raises() -> None:
     task = Task(
         input_path=Path("/tmp/in.pdf"),
