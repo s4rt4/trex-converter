@@ -120,12 +120,17 @@ def _show_fatal_error(title: str, message: str) -> None:
 def _show_qt_dialog(
     *, title: str, summary: str, detail: str, fatal: bool
 ) -> bool:
-    """Show a Qt dialog. Returns True when the user chose to continue."""
+    """Show a Qt dialog. Returns True when the user chose to continue.
+
+    Reuses the existing QApplication when one is already present (the
+    typical case during preflight, where main() builds the QApplication
+    upfront so the same instance carries over to the main window).
+    """
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication, QMessageBox
 
-    owns_app = QApplication.instance() is None
-    app = QApplication.instance() or QApplication(sys.argv)
+    if QApplication.instance() is None:
+        QApplication(sys.argv)
     box = QMessageBox()
     box.setIcon(QMessageBox.Icon.Critical if fatal else QMessageBox.Icon.Warning)
     box.setWindowTitle(title)
@@ -140,9 +145,6 @@ def _show_qt_dialog(
         )
         box.setDefaultButton(QMessageBox.StandardButton.Ignore)
     choice = box.exec()
-    if owns_app:
-        # Drop the temporary QApplication so the real run can build a fresh one.
-        del app
     return choice == QMessageBox.StandardButton.Ignore
 
 
@@ -189,37 +191,44 @@ def _format_python_deps_message(missing: list[tuple[str, str]]) -> tuple[str, st
     return summary, detail
 
 
-def _preflight_checks() -> bool:
-    """Run dep checks before building the main window. Returns False to abort."""
-    missing_py = _missing_python_deps()
-    if missing_py:
-        # If PySide6 itself is missing we can't show a Qt dialog. Fall back.
-        pyside_missing = any(mod == "PySide6" for mod, _ in missing_py)
-        summary, detail = _format_python_deps_message(missing_py)
-        if pyside_missing:
-            _show_fatal_error("T-Rex Converter — missing dependencies", f"{summary}\n\n{detail}")
-        else:
-            _show_qt_dialog(
-                title="T-Rex Converter — missing dependencies",
-                summary=summary,
-                detail=detail,
-                fatal=True,
-            )
-        return False
+def _check_required_python_deps() -> bool:
+    """Verify required Python deps before importing PySide6.
 
-    missing_bin = _missing_binaries()
-    missing_opt = _missing_optional_python_deps()
-    if missing_bin or missing_opt:
-        summary, detail = _format_optional_message(missing_bin, missing_opt)
-        keep_going = _show_qt_dialog(
-            title="T-Rex Converter — optional dependencies missing",
+    Returns False (and surfaces a fallback dialog) when something the GUI
+    depends on is missing. Runs BEFORE the QApplication is created.
+    """
+    missing_py = _missing_python_deps()
+    if not missing_py:
+        return True
+    summary, detail = _format_python_deps_message(missing_py)
+    pyside_missing = any(mod == "PySide6" for mod, _ in missing_py)
+    if pyside_missing:
+        _show_fatal_error(
+            "T-Rex Converter — missing dependencies", f"{summary}\n\n{detail}"
+        )
+    else:
+        _show_qt_dialog(
+            title="T-Rex Converter — missing dependencies",
             summary=summary,
             detail=detail,
-            fatal=False,
+            fatal=True,
         )
-        if not keep_going:
-            return False
-    return True
+    return False
+
+
+def _check_optional_deps() -> bool:
+    """Warn about missing optional deps. Returns False if user chose to quit."""
+    missing_bin = _missing_binaries()
+    missing_opt = _missing_optional_python_deps()
+    if not (missing_bin or missing_opt):
+        return True
+    summary, detail = _format_optional_message(missing_bin, missing_opt)
+    return _show_qt_dialog(
+        title="T-Rex Converter — optional dependencies missing",
+        summary=summary,
+        detail=detail,
+        fatal=False,
+    )
 
 
 def _format_optional_message(
@@ -258,7 +267,7 @@ def _format_optional_message(
 def main() -> int:
     configure_logging()
 
-    if not _preflight_checks():
+    if not _check_required_python_deps():
         return 1
 
     from PySide6.QtCore import Qt
@@ -267,8 +276,12 @@ def main() -> int:
     from app.ui.main_window import MainWindow
 
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
-    app = QApplication(sys.argv)
+    app = QApplication.instance() or QApplication(sys.argv)
     _apply_light_palette(app)
+
+    if not _check_optional_deps():
+        return 0
+
     loop = QEventLoop(app)
     asyncio.set_event_loop(loop)
     window = MainWindow()

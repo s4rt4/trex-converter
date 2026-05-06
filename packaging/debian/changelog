@@ -1,3 +1,14 @@
+t-rex-converter (1.0.2-1) unstable; urgency=medium
+
+  * Fix: Ignore on the optional-dependencies dialog now actually opens
+    the main window. Previously the dialog created its own throwaway
+    QApplication that conflicted with the second one created by main(),
+    so after Ignore the app exited silently. main() now creates the
+    QApplication once (after verifying required Python deps) and the
+    dialog reuses it via QApplication.instance().
+
+ -- T-Rex Converter Maintainers <maintainers@example.invalid>  Wed, 07 May 2026 06:00:00 +0700
+
 t-rex-converter (1.0.1-1) unstable; urgency=medium
 
   * Fix PyMuPDF detection on Debian Trixie. python3-pymupdf 1.25 only
