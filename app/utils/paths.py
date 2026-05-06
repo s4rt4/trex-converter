@@ -11,7 +11,22 @@ def project_root() -> Path:
 
 
 def asset_path(*parts: str) -> Path:
-    return project_root() / "assets" / Path(*parts)
+    """Return the on-disk path of an asset.
+
+    Looks first in the source-checkout layout (`<repo>/assets/...`), then
+    in the system layout shipped by the .deb (`/usr/share/t-rex-converter/
+    assets/...`). Returns the source-checkout path even when missing so
+    callers that only consume it for `QPixmap` (which silently no-ops on
+    a missing path) keep their existing behavior.
+    """
+    relative = Path(*parts)
+    dev = project_root() / "assets" / relative
+    if dev.exists():
+        return dev
+    system = Path("/usr/share/t-rex-converter/assets") / relative
+    if system.exists():
+        return system
+    return dev
 
 
 def config_dir() -> Path:

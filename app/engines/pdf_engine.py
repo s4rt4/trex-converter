@@ -1123,12 +1123,15 @@ def _save_kwargs_for(operation: str, fitz: ModuleType, task: Task) -> dict:
 
 def _load_fitz() -> ModuleType:
     try:
-        import fitz
-    except ImportError as exc:
-        raise RuntimeError(
-            "PyMuPDF is required for PDF processing. "
-            "Reinstall dependencies with: pip install -e ."
-        ) from exc
+        import pymupdf as fitz
+    except ImportError:
+        try:
+            import fitz
+        except ImportError as exc:
+            raise RuntimeError(
+                "PyMuPDF is required for PDF processing. "
+                "Reinstall dependencies with: pip install -e ."
+            ) from exc
     return fitz
 
 

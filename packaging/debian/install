@@ -5,4 +5,5 @@ assets/icons/hicolor/48x48/apps/t-rex-converter.png usr/share/icons/hicolor/48x4
 assets/icons/hicolor/64x64/apps/t-rex-converter.png usr/share/icons/hicolor/64x64/apps/
 assets/icons/hicolor/128x128/apps/t-rex-converter.png usr/share/icons/hicolor/128x128/apps/
 assets/icons/hicolor/256x256/apps/t-rex-converter.png usr/share/icons/hicolor/256x256/apps/
+assets/trex-logo.svg usr/share/t-rex-converter/assets/
 packaging/t-rex-converter.desktop usr/share/applications/

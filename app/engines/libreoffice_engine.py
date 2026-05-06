@@ -114,11 +114,14 @@ class LibreOfficeEngine(BaseEngine):
 
     async def _slides_to_images(self, task: Task) -> None:
         try:
-            import fitz
-        except ImportError as exc:
-            raise RuntimeError(
-                "PyMuPDF is required for PPTX slide rendering."
-            ) from exc
+            import pymupdf as fitz
+        except ImportError:
+            try:
+                import fitz
+            except ImportError as exc:
+                raise RuntimeError(
+                    "PyMuPDF is required for PPTX slide rendering."
+                ) from exc
 
         output_dir = Path(task.output_path)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -162,11 +165,14 @@ class LibreOfficeEngine(BaseEngine):
             raise RuntimeError("Bulk merge requires at least two input documents")
 
         try:
-            import fitz
-        except ImportError as exc:
-            raise RuntimeError(
-                "PyMuPDF is required for bulk merge. Reinstall with: pip install -e ."
-            ) from exc
+            import pymupdf as fitz
+        except ImportError:
+            try:
+                import fitz
+            except ImportError as exc:
+                raise RuntimeError(
+                    "PyMuPDF is required for bulk merge. Reinstall with: pip install -e ."
+                ) from exc
 
         output_path = Path(task.output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)

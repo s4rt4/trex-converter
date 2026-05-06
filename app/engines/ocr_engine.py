@@ -340,11 +340,14 @@ def _stitch_outputs(
 
 def _load_fitz() -> ModuleType:
     try:
-        import fitz
-    except ImportError as exc:
-        raise RuntimeError(
-            "PyMuPDF is required for PDF OCR. Reinstall dependencies with: pip install -e ."
-        ) from exc
+        import pymupdf as fitz
+    except ImportError:
+        try:
+            import fitz
+        except ImportError as exc:
+            raise RuntimeError(
+                "PyMuPDF is required for PDF OCR. Reinstall dependencies with: pip install -e ."
+            ) from exc
     return fitz
 
 

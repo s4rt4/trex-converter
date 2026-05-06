@@ -1,3 +1,18 @@
+t-rex-converter (1.0.1-1) unstable; urgency=medium
+
+  * Fix PyMuPDF detection on Debian Trixie. python3-pymupdf 1.25 only
+    ships the `pymupdf` import (the legacy `fitz` alias was removed),
+    so the launch-time dep check and every `import fitz` in the engines
+    now try `pymupdf` first and fall back to `fitz`. The dialog at
+    launch no longer falsely reports PyMuPDF as missing on a fresh
+    .deb install.
+  * Fix broken logo on system install. assets/trex-logo.svg is now
+    bundled at /usr/share/t-rex-converter/assets/, and the asset_path
+    helper falls back to that location when the source-checkout layout
+    is not present.
+
+ -- T-Rex Converter Maintainers <maintainers@example.invalid>  Wed, 06 May 2026 16:52:56 +0700
+
 t-rex-converter (1.0.0-1) unstable; urgency=medium
 
   * 1.0 release. Roadmap fully closed across every module: Image,

@@ -84,7 +84,9 @@ def _install_fake_fitz(monkeypatch, document: FakeDocument) -> SimpleNamespace:
         PDF_ENCRYPT_AES_256=4,
         PDF_ENCRYPT_NONE=0,
     )
-    monkeypatch.setitem(__import__("sys").modules, "fitz", fake_fitz)
+    sys_modules = __import__("sys").modules
+    monkeypatch.setitem(sys_modules, "fitz", fake_fitz)
+    monkeypatch.setitem(sys_modules, "pymupdf", fake_fitz)
     return fake_fitz
 
 
@@ -120,7 +122,9 @@ async def test_pdf_engine_renders_all_pages_with_numbered_outputs(tmp_path, monk
             return
 
     fake_fitz = SimpleNamespace(open=lambda _path: RenderDocument())
-    monkeypatch.setitem(__import__("sys").modules, "fitz", fake_fitz)
+    sys_modules = __import__("sys").modules
+    monkeypatch.setitem(sys_modules, "fitz", fake_fitz)
+    monkeypatch.setitem(sys_modules, "pymupdf", fake_fitz)
 
     task = Task(
         input_path=tmp_path / "scan.pdf",
@@ -474,7 +478,9 @@ async def test_extract_html_writes_html_document(tmp_path, monkeypatch) -> None:
         PDF_ENCRYPT_AES_256=4,
         PDF_ENCRYPT_NONE=0,
     )
-    monkeypatch.setitem(__import__("sys").modules, "fitz", fake_fitz)
+    sys_modules = __import__("sys").modules
+    monkeypatch.setitem(sys_modules, "fitz", fake_fitz)
+    monkeypatch.setitem(sys_modules, "pymupdf", fake_fitz)
 
     task = Task(
         input_path=tmp_path / "doc.pdf",

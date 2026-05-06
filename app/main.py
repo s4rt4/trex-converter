@@ -10,11 +10,13 @@ from app.utils.logger import configure_logging
 
 
 # Python modules whose absence makes the app unusable. The values are the
-# install names (which may differ from the import name).
-REQUIRED_PYTHON_DEPS: tuple[tuple[str, str], ...] = (
+# install names (which may differ from the import name). PyMuPDF is checked
+# via either `pymupdf` (modern) or `fitz` (legacy alias) — Debian 1.25 only
+# ships `pymupdf`, while older versions and pip wheels still ship `fitz`.
+REQUIRED_PYTHON_DEPS: tuple[tuple[str | tuple[str, ...], str], ...] = (
     ("PySide6", "PySide6"),
     ("qasync", "qasync"),
-    ("fitz", "PyMuPDF"),
+    (("pymupdf", "fitz"), "PyMuPDF"),
     ("qtawesome", "qtawesome"),
 )
 
@@ -56,11 +58,26 @@ INSTALL_HINT_APT = (
 )
 
 
+def _has_module(name_or_aliases: str | tuple[str, ...]) -> bool:
+    candidates = (
+        (name_or_aliases,) if isinstance(name_or_aliases, str) else name_or_aliases
+    )
+    return any(find_spec(c) is not None for c in candidates)
+
+
+def _primary_module_name(name_or_aliases: str | tuple[str, ...]) -> str:
+    return (
+        name_or_aliases
+        if isinstance(name_or_aliases, str)
+        else name_or_aliases[0]
+    )
+
+
 def _missing_python_deps() -> list[tuple[str, str]]:
     return [
-        (mod, pkg)
+        (_primary_module_name(mod), pkg)
         for mod, pkg in REQUIRED_PYTHON_DEPS
-        if find_spec(mod) is None
+        if not _has_module(mod)
     ]
 
 
