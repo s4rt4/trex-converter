@@ -11,11 +11,13 @@ from app.engines.base import BaseEngine, EngineCapabilities
 
 PDF_IMAGE_FORMATS = {"jpg", "jpeg", "png"}
 PDF_TEXT_FORMATS = {"txt", "html"}
+PDF_DOCUMENT_FORMATS = {"docx", "epub"}
 PDF_FOLDER_OUTPUT = "folder"
 SUPPORTED_PAIRS = (
     {("pdf", format_out) for format_out in PDF_IMAGE_FORMATS}
     | {("pdf", "pdf")}
     | {("pdf", format_out) for format_out in PDF_TEXT_FORMATS}
+    | {("pdf", format_out) for format_out in PDF_DOCUMENT_FORMATS}
     | {("pdf", PDF_FOLDER_OUTPUT)}
 )
 DEFAULT_DPI = 200
@@ -25,6 +27,8 @@ PDF_OPERATIONS = {
     "reorder",
     "rotate",
     "compress",
+    "compress_images",
+    "linearize",
     "repair",
     "encrypt",
     "decrypt",
@@ -87,6 +91,10 @@ class PDFEngine(BaseEngine):
             await self._extract_text(task, output_path)
         elif format_out == "html":
             await self._extract_html(task, output_path)
+        elif format_out == "docx":
+            await self._run_pdf_to_docx(task, output_path)
+        elif format_out == "epub":
+            await self._run_pdf_to_epub(task, output_path)
         elif format_out == "pdf":
             await self._run_pdf_operation(task, output_path)
         else:
@@ -145,6 +153,12 @@ class PDFEngine(BaseEngine):
     async def _run_split(self, task: Task, output_dir: Path) -> None:
         fitz = _load_fitz()
         output_dir.mkdir(parents=True, exist_ok=True)
+        mode = str(task.options.get("split_mode") or "every_n").lower()
+
+        if mode == "size":
+            await self._run_split_by_size(task, output_dir, fitz)
+            return
+
         document = fitz.open(str(task.input_path))
         try:
             page_count = len(document)
@@ -174,6 +188,68 @@ class PDFEngine(BaseEngine):
             _close(document)
 
         task.append_log(f"Split into {len(chunks)} file(s) under {output_dir}")
+        task.progress = 1.0
+
+    async def _run_split_by_size(self, task: Task, output_dir: Path, fitz: ModuleType) -> None:
+        size_mb = _float_option(task.options.get("split_size_mb"))
+        if size_mb is None or size_mb <= 0:
+            raise RuntimeError(
+                "split_mode=size requires split_size_mb (positive number of megabytes)"
+            )
+        size_limit = int(size_mb * 1024 * 1024)
+
+        document = fitz.open(str(task.input_path))
+        try:
+            page_count = len(document)
+            if page_count == 0:
+                raise RuntimeError("PDF has no pages")
+
+            stem = Path(task.input_path).stem
+            chunk_doc = fitz.open()
+            chunk_start_page = 0
+            chunk_pages = 0
+            chunk_index = 1
+            written = 0
+
+            for page_index in range(page_count):
+                chunk_doc.insert_pdf(document, from_page=page_index, to_page=page_index)
+                chunk_pages += 1
+                serialized = chunk_doc.tobytes(garbage=3, deflate=True)
+                if len(serialized) > size_limit and chunk_pages > 1:
+                    # Roll back the page that overflowed and finalize.
+                    chunk_doc.delete_page(chunk_pages - 1)
+                    chunk_pages -= 1
+                    out_pdf = output_dir / f"{stem}-{chunk_index:03d}.pdf"
+                    chunk_doc.save(str(out_pdf), garbage=3, deflate=True)
+                    task.append_log(
+                        f"Wrote split {chunk_index}: {out_pdf.name} "
+                        f"(pages {chunk_start_page + 1}-{chunk_start_page + chunk_pages})"
+                    )
+                    written += 1
+                    _close(chunk_doc)
+                    chunk_index += 1
+                    chunk_doc = fitz.open()
+                    chunk_doc.insert_pdf(document, from_page=page_index, to_page=page_index)
+                    chunk_start_page = page_index
+                    chunk_pages = 1
+                task.progress = 0.05 + 0.85 * ((page_index + 1) / page_count)
+                await asyncio.sleep(0)
+
+            if chunk_pages > 0:
+                out_pdf = output_dir / f"{stem}-{chunk_index:03d}.pdf"
+                chunk_doc.save(str(out_pdf), garbage=3, deflate=True)
+                task.append_log(
+                    f"Wrote split {chunk_index}: {out_pdf.name} "
+                    f"(pages {chunk_start_page + 1}-{chunk_start_page + chunk_pages})"
+                )
+                written += 1
+            _close(chunk_doc)
+        finally:
+            _close(document)
+
+        task.append_log(
+            f"Split by size {size_mb} MB into {written} file(s) under {output_dir}"
+        )
         task.progress = 1.0
 
     async def _run_extract_images(self, task: Task, output_dir: Path) -> None:
@@ -334,6 +410,72 @@ class PDFEngine(BaseEngine):
         task.append_log(f"Wrote HTML: {output_path}")
         task.progress = 1.0
 
+    async def _run_pdf_to_docx(self, task: Task, output_path: Path) -> None:
+        try:
+            from pdf2docx import Converter
+        except ImportError as exc:
+            raise RuntimeError(
+                "pdf2docx is required for PDF→DOCX. "
+                "Install with: .venv/bin/pip install pdf2docx"
+            ) from exc
+
+        task.append_log("Converting PDF → DOCX via pdf2docx")
+
+        def _convert() -> None:
+            converter = Converter(str(task.input_path))
+            try:
+                converter.convert(str(output_path))
+            finally:
+                converter.close()
+
+        await asyncio.to_thread(_convert)
+        task.append_log(f"Wrote DOCX: {output_path}")
+        task.progress = 1.0
+
+    async def _run_pdf_to_epub(self, task: Task, output_path: Path) -> None:
+        fitz = _load_fitz()
+        document = fitz.open(str(task.input_path))
+        try:
+            page_count = len(document)
+            if page_count == 0:
+                raise RuntimeError("PDF has no pages")
+            chapters: list[tuple[str, str]] = []
+            for index in range(page_count):
+                page = document.load_page(index)
+                html_body = page.get_text("html") or ""
+                chapters.append((f"chapter-{index + 1:04d}.xhtml", html_body))
+                task.progress = 0.05 + 0.85 * ((index + 1) / page_count)
+                await asyncio.sleep(0)
+            metadata = document.metadata or {}
+        finally:
+            _close(document)
+
+        title = str(metadata.get("title") or Path(task.input_path).stem)
+        author = str(metadata.get("author") or "")
+        await asyncio.to_thread(_write_epub, output_path, title, author, chapters)
+        task.append_log(f"Wrote EPUB: {output_path} ({len(chapters)} page(s))")
+        task.progress = 1.0
+
+    async def _run_qpdf_linearize(self, task: Task, output_path: Path) -> None:
+        command = ["qpdf", "--linearize", str(task.input_path), str(output_path)]
+        task.append_log("Running: " + " ".join(command))
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout_bytes, stderr_bytes = await process.communicate()
+        for stream in (stdout_bytes, stderr_bytes):
+            text = stream.decode("utf-8", errors="replace").strip()
+            if text:
+                task.append_log(text)
+        if process.returncode not in (0, 3):
+            raise RuntimeError(
+                f"qpdf --linearize exited with code {process.returncode}"
+            )
+        task.append_log(f"Linearized PDF written to {output_path}")
+        task.progress = 1.0
+
     async def _run_pdf_operation(self, task: Task, output_path: Path) -> None:
         operation = (task.options.get("operation") or "extract_pages").lower()
         if operation not in PDF_OPERATIONS:
@@ -341,6 +483,10 @@ class PDFEngine(BaseEngine):
 
         if operation == "repair":
             await self._run_qpdf_repair(task, output_path)
+            return
+
+        if operation == "linearize":
+            await self._run_qpdf_linearize(task, output_path)
             return
 
         if operation == "merge":
@@ -368,6 +514,7 @@ class PDFEngine(BaseEngine):
                 "reorder": _op_reorder,
                 "rotate": _op_rotate,
                 "compress": _op_compress,
+                "compress_images": _op_compress_images,
                 "encrypt": _op_encrypt,
                 "decrypt": _op_decrypt,
                 "strip_metadata": _op_strip_metadata,
@@ -435,6 +582,79 @@ def _op_rotate(document, fitz: ModuleType, task: Task, page_count: int) -> None:
 
 def _op_compress(document, fitz: ModuleType, task: Task, page_count: int) -> None:
     task.append_log("Compressing via PyMuPDF garbage collection + deflate")
+
+
+def _op_compress_images(document, fitz: ModuleType, task: Task, page_count: int) -> None:
+    target_dpi = _int_option(task.options.get("compress_images_target_dpi")) or 150
+    if target_dpi < 36 or target_dpi > 600:
+        raise RuntimeError(
+            f"compress_images_target_dpi must be between 36 and 600, got {target_dpi}"
+        )
+    quality = _int_option(task.options.get("compress_images_quality")) or 75
+    if quality < 1 or quality > 100:
+        raise RuntimeError(
+            f"compress_images_quality must be between 1 and 100, got {quality}"
+        )
+
+    seen_xrefs: set[int] = set()
+    replaced = 0
+    skipped = 0
+    for page_index in range(page_count):
+        page = document.load_page(page_index)
+        rect = page.rect
+        page_width_pt = max(rect.width, 1.0)
+        page_height_pt = max(rect.height, 1.0)
+        for info in page.get_images(full=True):
+            xref = info[0]
+            if xref in seen_xrefs:
+                continue
+            seen_xrefs.add(xref)
+            try:
+                source = fitz.Pixmap(document, xref)
+            except Exception as exc:  # pragma: no cover - defensive
+                task.append_log(f"skip xref {xref}: {exc}")
+                skipped += 1
+                continue
+            try:
+                # Effective DPI = pixel dim ÷ rendered size (in inches).
+                width_pt = page_width_pt
+                height_pt = page_height_pt
+                effective_dpi = max(
+                    source.width / (width_pt / 72.0),
+                    source.height / (height_pt / 72.0),
+                )
+                if effective_dpi <= target_dpi:
+                    skipped += 1
+                    continue
+                ratio = target_dpi / effective_dpi
+                new_w = max(1, int(source.width * ratio))
+                new_h = max(1, int(source.height * ratio))
+                try:
+                    smaller = fitz.Pixmap(source, new_w, new_h)
+                except Exception:  # pragma: no cover
+                    skipped += 1
+                    continue
+                try:
+                    if smaller.alpha:
+                        new_bytes = smaller.tobytes("png")
+                    else:
+                        new_bytes = smaller.tobytes("jpeg", jpg_quality=quality)
+                except TypeError:
+                    # Older PyMuPDF: tobytes only accepts the format string.
+                    new_bytes = smaller.tobytes("jpeg" if not smaller.alpha else "png")
+                try:
+                    document.update_stream(xref, new_bytes)
+                    replaced += 1
+                finally:
+                    _close(smaller) if hasattr(smaller, "close") else None
+            finally:
+                _close(source) if hasattr(source, "close") else None
+        task.progress = 0.05 + 0.85 * ((page_index + 1) / max(page_count, 1))
+
+    task.append_log(
+        f"Image downsample: replaced {replaced} stream(s), skipped {skipped}; "
+        f"target {target_dpi} DPI, JPEG q={quality}"
+    )
 
 
 def _op_encrypt(document, fitz: ModuleType, task: Task, page_count: int) -> None:
@@ -638,6 +858,128 @@ def _parse_color(value: object, default: tuple[float, float, float]) -> tuple[fl
     return default
 
 
+def _write_epub(
+    output_path: Path,
+    title: str,
+    author: str,
+    chapters: list[tuple[str, str]],
+) -> None:
+    """Build a minimal EPUB 2 archive at ``output_path``.
+
+    Each chapter is a (filename, html_body) pair. The HTML body is wrapped
+    in a minimal XHTML scaffold; PyMuPDF's html output already contains
+    an inline <body> but we wrap defensively.
+    """
+    import uuid
+    import xml.sax.saxutils as saxutils
+    import zipfile
+
+    if not chapters:
+        raise RuntimeError("EPUB requires at least one chapter")
+
+    book_id = f"urn:uuid:{uuid.uuid4()}"
+    safe_title = saxutils.escape(title or "Untitled")
+    safe_author = saxutils.escape(author or "Unknown")
+
+    container_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n'
+        '  <rootfiles>\n'
+        '    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>\n'
+        '  </rootfiles>\n'
+        '</container>\n'
+    )
+
+    manifest_items = "\n".join(
+        f'    <item id="ch{i+1}" href="{name}" media-type="application/xhtml+xml"/>'
+        for i, (name, _) in enumerate(chapters)
+    )
+    spine_items = "\n".join(
+        f'    <itemref idref="ch{i+1}"/>'
+        for i in range(len(chapters))
+    )
+    content_opf = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="bookid">\n'
+        '  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">\n'
+        f'    <dc:identifier id="bookid">{book_id}</dc:identifier>\n'
+        f'    <dc:title>{safe_title}</dc:title>\n'
+        f'    <dc:creator>{safe_author}</dc:creator>\n'
+        '    <dc:language>en</dc:language>\n'
+        '  </metadata>\n'
+        '  <manifest>\n'
+        '    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>\n'
+        f'{manifest_items}\n'
+        '  </manifest>\n'
+        '  <spine toc="ncx">\n'
+        f'{spine_items}\n'
+        '  </spine>\n'
+        '</package>\n'
+    )
+
+    nav_points = "\n".join(
+        f'    <navPoint id="np{i+1}" playOrder="{i+1}">\n'
+        f'      <navLabel><text>Page {i+1}</text></navLabel>\n'
+        f'      <content src="{name}"/>\n'
+        f'    </navPoint>'
+        for i, (name, _) in enumerate(chapters)
+    )
+    toc_ncx = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">\n'
+        '  <head>\n'
+        f'    <meta name="dtb:uid" content="{book_id}"/>\n'
+        '    <meta name="dtb:depth" content="1"/>\n'
+        '  </head>\n'
+        f'  <docTitle><text>{safe_title}</text></docTitle>\n'
+        '  <navMap>\n'
+        f'{nav_points}\n'
+        '  </navMap>\n'
+        '</ncx>\n'
+    )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(output_path, "w") as epub:
+        # Mimetype must be the FIRST entry and stored uncompressed.
+        epub.writestr(
+            zipfile.ZipInfo("mimetype"),
+            "application/epub+zip",
+            compress_type=zipfile.ZIP_STORED,
+        )
+        epub.writestr("META-INF/container.xml", container_xml, zipfile.ZIP_DEFLATED)
+        epub.writestr("OEBPS/content.opf", content_opf, zipfile.ZIP_DEFLATED)
+        epub.writestr("OEBPS/toc.ncx", toc_ncx, zipfile.ZIP_DEFLATED)
+        for index, (name, body) in enumerate(chapters, start=1):
+            chapter_xhtml = _wrap_xhtml(f"Page {index}", body)
+            epub.writestr(f"OEBPS/{name}", chapter_xhtml, zipfile.ZIP_DEFLATED)
+
+
+def _wrap_xhtml(title: str, body_html: str) -> str:
+    """Wrap a fragment of HTML as an XHTML chapter document."""
+    import xml.sax.saxutils as saxutils
+
+    # PyMuPDF emits a full <html>...<body>...</body></html> document. Strip
+    # the outer tags if present so we can re-wrap with our XHTML scaffold.
+    stripped = body_html.strip()
+    if "<body" in stripped.lower():
+        start = stripped.lower().find("<body")
+        gt = stripped.find(">", start)
+        end = stripped.lower().rfind("</body>")
+        if gt != -1 and end != -1:
+            stripped = stripped[gt + 1:end].strip()
+
+    safe_title = saxutils.escape(title)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" '
+        '"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n'
+        '<html xmlns="http://www.w3.org/1999/xhtml">\n'
+        f'<head><title>{safe_title}</title></head>\n'
+        f'<body>\n{stripped}\n</body>\n'
+        '</html>\n'
+    )
+
+
 def _safe_attachment_name(name: str) -> str:
     text = str(name).strip().replace("/", "_").replace("\\", "_")
     text = text.lstrip(".")
@@ -645,7 +987,7 @@ def _safe_attachment_name(name: str) -> str:
 
 
 def _save_kwargs_for(operation: str, fitz: ModuleType, task: Task) -> dict:
-    if operation == "compress":
+    if operation in ("compress", "compress_images"):
         return {"garbage": 4, "deflate": True, "clean": True}
 
     if operation == "encrypt":

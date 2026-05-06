@@ -189,6 +189,7 @@ class SubtitleMergeOptionsPanel(QWidget):
 SPLIT_MODES = (
     ("Every N pages", "every_n"),
     ("Custom ranges", "range"),
+    ("By file size (MB)", "size"),
 )
 PAGE_NUMBER_GRAVITIES = (
     ("Bottom (south)", "south"),
@@ -360,11 +361,20 @@ class PDFSplitOptionsPanel(QWidget):
         self.ranges_input.setPlaceholderText("e.g. 1-5, 6-10, 11-20")
         self.ranges_input.setEnabled(False)
 
+        self.size_input = QDoubleSpinBox(self)
+        self.size_input.setRange(0.1, 10240.0)
+        self.size_input.setDecimals(1)
+        self.size_input.setSingleStep(1.0)
+        self.size_input.setValue(10.0)
+        self.size_input.setSuffix(" MB")
+        self.size_input.setEnabled(False)
+        _use_stepper(self.size_input)
+
         info = QLabel(
             "Every N pages: each output covers consecutive N pages. "
-            "Custom ranges: comma-separated 1-based ranges; each range becomes "
-            "one output file. Outputs land in the chosen folder as "
-            "`<stem>-001.pdf`, `<stem>-002.pdf`, …",
+            "Custom ranges: comma-separated 1-based ranges. "
+            "By file size: pack pages until the chunk exceeds the limit, then start a new file. "
+            "Outputs land in the chosen folder as `<stem>-001.pdf`, `<stem>-002.pdf`, …",
             self,
         )
         info.setWordWrap(True)
@@ -375,22 +385,28 @@ class PDFSplitOptionsPanel(QWidget):
         grid.addWidget(self.pages_per_file_input, 1, 1)
         grid.addWidget(_field("Ranges", self), 2, 0)
         grid.addWidget(self.ranges_input, 2, 1)
+        grid.addWidget(_field("Max chunk size", self), 3, 0)
+        grid.addWidget(self.size_input, 3, 1)
 
         layout.addLayout(grid)
         layout.addWidget(info)
         layout.addStretch(1)
 
     def _toggle_inputs(self, _index: int) -> None:
-        is_range = self.mode_combo.currentData() == "range"
-        self.ranges_input.setEnabled(is_range)
-        self.pages_per_file_input.setEnabled(not is_range)
+        mode = self.mode_combo.currentData()
+        self.ranges_input.setEnabled(mode == "range")
+        self.size_input.setEnabled(mode == "size")
+        self.pages_per_file_input.setEnabled(mode == "every_n")
 
     def collect_options(self) -> dict:
-        options: dict[str, object] = {"split_mode": self.mode_combo.currentData() or "every_n"}
-        if options["split_mode"] == "range":
+        mode = self.mode_combo.currentData() or "every_n"
+        options: dict[str, object] = {"split_mode": mode}
+        if mode == "range":
             ranges = self.ranges_input.text().strip()
             if ranges:
                 options["split_ranges"] = ranges
+        elif mode == "size":
+            options["split_size_mb"] = round(self.size_input.value(), 1)
         else:
             options["split_pages_per_file"] = self.pages_per_file_input.value()
         return options

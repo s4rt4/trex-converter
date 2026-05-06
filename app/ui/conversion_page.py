@@ -466,7 +466,7 @@ class ConversionPage(QWidget):
                 "pptx", "odp",
             }
         if self.config.kind == "pdf":
-            return output in {*IMAGE_FORMATS, "txt", "pdf", "html"}
+            return output in {*IMAGE_FORMATS, "txt", "pdf", "html", "docx", "epub"}
         if self.config.kind == "pdf-merge":
             return output == "pdf"
         if self.config.kind == "pdf-split":

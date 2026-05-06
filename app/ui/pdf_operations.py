@@ -35,6 +35,8 @@ SECURITY_ACTIONS = (
 )
 COMPRESS_ACTIONS = (
     ("Compress (PyMuPDF garbage + deflate)", "compress"),
+    ("Compress images (downsample to target DPI)", "compress_images"),
+    ("Linearize (qpdf web-fast)", "linearize"),
     ("Repair (qpdf round-trip)", "repair"),
 )
 METADATA_ACTIONS = (
@@ -135,16 +137,34 @@ class PDFOperationsPanel(QWidget):
 
         self.compress_action_combo = _combo(page, COMPRESS_ACTIONS)
 
+        self.compress_target_dpi_input = QSpinBox(page)
+        self.compress_target_dpi_input.setRange(36, 600)
+        self.compress_target_dpi_input.setValue(150)
+        self.compress_target_dpi_input.setSuffix(" dpi")
+        _use_stepper(self.compress_target_dpi_input)
+
+        self.compress_quality_input = QSpinBox(page)
+        self.compress_quality_input.setRange(1, 100)
+        self.compress_quality_input.setValue(75)
+        _use_stepper(self.compress_quality_input)
+
         info = QLabel(
             "Compress: PyMuPDF garbage-collect + dedupe + deflate.\n"
+            "Compress images: downsample raster images above the target DPI and "
+            "re-encode as JPEG (quality 1–100).\n"
+            "Linearize: qpdf --linearize for web-fast (byte-streaming) PDFs.\n"
             "Repair: round-trip through qpdf to recover from minor corruption.",
             page,
         )
         info.setWordWrap(True)
 
         grid.addWidget(_field("Action", page), 0, 0)
-        grid.addWidget(self.compress_action_combo, 0, 1)
-        grid.addWidget(info, 1, 0, 1, 2)
+        grid.addWidget(self.compress_action_combo, 0, 1, 1, 3)
+        grid.addWidget(_field("Target DPI", page), 1, 0)
+        grid.addWidget(self.compress_target_dpi_input, 1, 1)
+        grid.addWidget(_field("JPEG quality", page), 1, 2)
+        grid.addWidget(self.compress_quality_input, 1, 3)
+        grid.addWidget(info, 2, 0, 1, 4)
         return page
 
     def _build_watermark_tab(self, parent: QWidget) -> QWidget:
@@ -297,9 +317,12 @@ class PDFOperationsPanel(QWidget):
             return options
 
         if tab == "compress":
-            return {
-                "operation": self.compress_action_combo.currentData() or "compress",
-            }
+            action = self.compress_action_combo.currentData() or "compress"
+            options: dict[str, object] = {"operation": action}
+            if action == "compress_images":
+                options["compress_images_target_dpi"] = self.compress_target_dpi_input.value()
+                options["compress_images_quality"] = self.compress_quality_input.value()
+            return options
 
         if tab == "security":
             action = self.security_action_combo.currentData() or "encrypt"

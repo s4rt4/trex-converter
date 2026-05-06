@@ -1280,3 +1280,250 @@ async def test_redact_no_match_raises(tmp_path) -> None:
     )
     with pytest.raises(RuntimeError, match="No redactable matches"):
         await PDFEngine().convert(task)
+
+
+# ---- PDF → DOCX (Wave: PDF Tools finale) ----
+
+
+def test_supports_pdf_to_docx_and_epub() -> None:
+    engine = PDFEngine()
+    assert engine.supports("pdf", "docx")
+    assert engine.supports("pdf", "epub")
+
+
+@pytest.mark.asyncio
+async def test_pdf_to_docx_writes_file(tmp_path) -> None:
+    pytest.importorskip("pdf2docx")
+    fitz = pytest.importorskip("fitz")
+
+    src = tmp_path / "src.pdf"
+    _make_pdf_with_text(src, fitz, ["hello docx", "second page"])
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.docx",
+        format_in="pdf",
+        format_out="docx",
+        engine="pdf",
+    )
+    await PDFEngine().convert(task)
+
+    assert (tmp_path / "out.docx").exists()
+    assert (tmp_path / "out.docx").stat().st_size > 0
+    assert task.progress == 1.0
+
+
+# ---- PDF → EPUB ----
+
+
+@pytest.mark.asyncio
+async def test_pdf_to_epub_writes_valid_zip(tmp_path) -> None:
+    import zipfile
+    fitz = pytest.importorskip("fitz")
+
+    src = tmp_path / "src.pdf"
+    _make_pdf_with_text(src, fitz, ["chapter one", "chapter two", "chapter three"])
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.epub",
+        format_in="pdf",
+        format_out="epub",
+        engine="pdf",
+    )
+    await PDFEngine().convert(task)
+
+    out = tmp_path / "out.epub"
+    assert out.exists()
+    with zipfile.ZipFile(out) as zf:
+        names = zf.namelist()
+        assert names[0] == "mimetype"
+        assert "META-INF/container.xml" in names
+        assert "OEBPS/content.opf" in names
+        assert "OEBPS/toc.ncx" in names
+        chapter_names = [n for n in names if n.startswith("OEBPS/chapter-")]
+        assert len(chapter_names) == 3
+        # Mimetype must be stored uncompressed
+        assert zf.getinfo("mimetype").compress_type == zipfile.ZIP_STORED
+        assert zf.read("mimetype").decode("utf-8") == "application/epub+zip"
+
+
+def test_write_epub_rejects_empty_chapters(tmp_path) -> None:
+    from app.engines.pdf_engine import _write_epub
+    with pytest.raises(RuntimeError, match="at least one chapter"):
+        _write_epub(tmp_path / "x.epub", "T", "A", [])
+
+
+def test_wrap_xhtml_strips_existing_body_wrapper() -> None:
+    from app.engines.pdf_engine import _wrap_xhtml
+    inner = _wrap_xhtml(
+        "Page 1",
+        "<html><body><p>hello</p></body></html>",
+    )
+    # Outer <html><body> from PyMuPDF is stripped; our scaffold wraps the <p>
+    assert inner.count("<body") == 1
+    assert "<p>hello</p>" in inner
+
+
+# ---- PDF Split by file size ----
+
+
+@pytest.mark.asyncio
+async def test_split_by_size_chunks_pages(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+
+    src = tmp_path / "src.pdf"
+    # Create 6 pages with substantial text so each page contributes meaningful bytes.
+    _make_pdf_with_text(
+        src, fitz,
+        [f"page body line {i} " * 200 for i in range(6)],
+    )
+
+    out_dir = tmp_path / "chunks"
+    task = Task(
+        input_path=src,
+        output_path=out_dir,
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={
+            "operation": "split",
+            "split_mode": "size",
+            # Synthetic PDFs are tight (~2.5 KB total); pick ~1.5 KB to force a split.
+            "split_size_mb": 0.0015,
+        },
+    )
+    await PDFEngine().convert(task)
+
+    chunks = sorted(out_dir.glob("*.pdf"))
+    assert len(chunks) >= 2
+    for chunk in chunks:
+        # Each chunk PDF should be valid
+        doc = fitz.open(str(chunk))
+        try:
+            assert len(doc) >= 1
+        finally:
+            doc.close()
+
+
+@pytest.mark.asyncio
+async def test_split_by_size_requires_positive_size(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+
+    src = tmp_path / "src.pdf"
+    _make_pdf_with_text(src, fitz, ["a"])
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "chunks",
+        format_in="pdf",
+        format_out="folder",
+        engine="pdf",
+        options={"operation": "split", "split_mode": "size"},
+    )
+    with pytest.raises(RuntimeError, match="split_size_mb"):
+        await PDFEngine().convert(task)
+
+
+# ---- Image-downsample compress ----
+
+
+@pytest.mark.asyncio
+async def test_compress_images_validates_dpi(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+
+    src = tmp_path / "src.pdf"
+    _make_pdf_with_text(src, fitz, ["x"])
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.pdf",
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "compress_images", "compress_images_target_dpi": 5},
+    )
+    with pytest.raises(RuntimeError, match="compress_images_target_dpi"):
+        await PDFEngine().convert(task)
+
+
+@pytest.mark.asyncio
+async def test_compress_images_validates_quality(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+
+    src = tmp_path / "src.pdf"
+    _make_pdf_with_text(src, fitz, ["x"])
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.pdf",
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={
+            "operation": "compress_images",
+            "compress_images_quality": 200,
+        },
+    )
+    with pytest.raises(RuntimeError, match="compress_images_quality"):
+        await PDFEngine().convert(task)
+
+
+@pytest.mark.asyncio
+async def test_compress_images_no_op_when_no_images_succeeds(tmp_path) -> None:
+    fitz = pytest.importorskip("fitz")
+
+    src = tmp_path / "src.pdf"
+    _make_pdf_with_text(src, fitz, ["just text"])
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.pdf",
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "compress_images"},
+    )
+    await PDFEngine().convert(task)
+
+    assert (tmp_path / "out.pdf").exists()
+    assert any("Image downsample" in line for line in task.log)
+
+
+# ---- qpdf linearize ----
+
+
+@pytest.mark.asyncio
+async def test_linearize_invokes_qpdf_with_linearize_flag(tmp_path, monkeypatch) -> None:
+    fake = tmp_path / "qpdf"
+    fake.write_text(
+        "#!/bin/sh\n"
+        "# Echo args to a sentinel file so the test can assert on them.\n"
+        "echo \"$@\" > \"$0.args\"\n"
+        "# Last argument is the destination.\n"
+        "for arg in \"$@\"; do last=\"$arg\"; done\n"
+        "echo 'fake' > \"$last\"\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    import os as _os
+    monkeypatch.setenv("PATH", f"{tmp_path}:{_os.environ.get('PATH', '')}")
+
+    fitz = pytest.importorskip("fitz")
+    src = tmp_path / "src.pdf"
+    _make_pdf_with_text(src, fitz, ["x"])
+
+    task = Task(
+        input_path=src,
+        output_path=tmp_path / "out.pdf",
+        format_in="pdf",
+        format_out="pdf",
+        engine="pdf",
+        options={"operation": "linearize"},
+    )
+    await PDFEngine().convert(task)
+
+    args = (tmp_path / "qpdf.args").read_text().strip()
+    assert "--linearize" in args
+    assert (tmp_path / "out.pdf").exists()

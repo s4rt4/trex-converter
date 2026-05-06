@@ -22,7 +22,7 @@ Sudah ada:
 - SQLite `TaskRepository` untuk history dan resume pending/running task.
 - `ConversionRegistry` untuk routing format ke engine.
 - Dependency checker untuk binary system.
-- FFmpeg engine nyata dengan progress parsing, cancel subprocess, plus opsi lengkap: trim, resolution preset, compress (CRF + libx264 preset), rotate/flip/crop, speed change 0.5x–2.0x, watermark teks via drawtext, reverse, logo overlay (`-filter_complex`), subtitle burn-in (`subtitles=`/`ass=`), GIF creator (palettegen+paletteuse), animated WebP (libwebp + loop=0), contact sheet (select+tile) ke PNG/JPG, single-frame still extraction.
+- FFmpeg engine nyata dengan progress parsing, cancel subprocess, plus opsi lengkap: trim, resolution preset, compress (CRF + libx264 preset, plus two-pass `target_size_mb` via ffprobe duration probe + `_run_two_pass`), rotate/flip/crop, speed change 0.5x–2.0x, watermark teks via drawtext, reverse, logo overlay (`-filter_complex`), subtitle burn-in (`subtitles=`/`ass=`), GIF creator (palettegen+paletteuse), animated WebP (libwebp + loop=0), contact sheet (select+tile) ke PNG/JPG, single-frame still extraction, stream-copy trim (`stream_copy: bool` → `-c copy` + skip filter chain), subtitle extract (`mkv|mp4|mov|webm → srt|ass|vtt` via `-map 0:s:N -c:s codec`), dan `detect_hardware_accels()` helper untuk dependency dialog.
 - Audio module: full audio↔audio matrix (mp3/wav/aac/flac/m4a/opus/ogg) + video→audio extract; trim, fade-in/out, gain, loudnorm EBU R128, channel down-mix, sample-rate convert.
 - Tesseract OCR engine nyata: image (png/jpg/jpeg/tif/tiff/bmp) DAN PDF input → searchable PDF / TXT / hOCR / TSV. PDF pipeline: render setiap halaman dengan PyMuPDF (default 300 DPI), OCR per halaman, stitch (PDF via `insert_pdf`, TXT dengan `\f`, hOCR concat ocr_page divs + renumber ID, TSV header tunggal + rows). Auto-rotate via OSD pre-pass (`tesseract --psm 0`) parsing `Rotate:` lalu re-render via `page.set_rotation`. Language picker (eng/ind/eng+ind plus custom), PSM, OEM. Routed via `force_engine` flag pada page + `ConversionRegistry.engine_by_name` + `TaskQueue.engine_by_name`.
 - LibreOffice engine: format matrix penuh (text/spreadsheet/presentation), 52 pairs. PDF output filter di-build via `_convert_to_format` JSON dict yang gabungkan `pdf_a` (PDF/A-1a archival, SelectPdfVersion=1), `pdf_password_user` (DocumentOpenPassword + EncryptFile), dan `pdf_password_owner` (PermissionPassword + RestrictPermissions). Plus slide rendering (presentation × {folder}, dispatch `slides_to_images`: convert ke PDF tempdir, lalu PyMuPDF Pixmap render setiap halaman ke PNG/JPG di DPI configurable).
@@ -32,7 +32,7 @@ Sudah ada:
 - Inkscape engine (SVG / Vector Tools, Wave 1 + 2 + 3 lengkap): pair `svg→png` (dpi / width / height), `svg→pdf` (vector preserved), `svg→svg` dengan operation `cleanup` (`--export-plain-svg --vacuum-defs`) atau `trim` (cleanup + `--export-area-drawing`). Wave 2: `svg→eps`, `svg→ps` dengan opsional `--export-ps-level=2|3` dan `--export-text-to-path`; `svg→emf`, `svg→wmf`; `pdf→svg` dengan `--pages=N` (default page 1) dan `--export-plain-svg`. Wave 3: export-by-id (`inkscape_export_id` + `inkscape_export_id_only` emit `--export-id=ID [--export-id-only]`); DXF round-trip (`svg→dxf` via extension `org.ekips.output.dxf_outlines` / R14 default atau `org.inkscape.output.dxf_twelve` / R12; `dxf→svg` via `--export-type=svg --export-plain-svg`); pixmap→SVG trace (8 bitmap formats → svg via pipeline `magick INPUT -colorspace Gray TEMP.pgm` lalu `potrace TEMP.pgm -s -o OUT.svg` dengan options trace_threshold/turdsize/alphamax). Engine declare `extra_binaries=("potrace", "magick")`. `convert()` dispatch ke `_run_trace` untuk bitmap pairs atau `build_command`+`_run` untuk Inkscape pairs. Subprocess via `asyncio.create_subprocess_exec` dengan `output_path.exists()` post-check.
 - Settings dataclass + JSON persistence di `~/.config/trex-converter/settings.json`; di-consume runner (max_concurrency) dan conversion_page (output_dir).
 - ImageMagick engine nyata dengan opsi lengkap: transform (rotate, flip, flop, auto-trim, free crop, aspect crop), resize modes (dimension, longest edge, percent, megapixel), fit-to-canvas dengan letterbox (`-resize WxH -background COLOR -gravity center -extent WxH`), color (grayscale, sepia, negate, normalize, brightness, contrast, gamma), filter (blur, sharpen, denoise, vignette), border/frame, watermark teks/gambar dengan gravity dan opacity, density, dan ICO multi-resolution auto-resize.
-- PDF engine nyata via PyMuPDF + qpdf: render halaman PDF ke PNG/JPG, ekstrak ke TXT/HTML, plus operasi PDF→PDF (extract pages, reorder, rotate, compress, repair via qpdf, encrypt/decrypt AES-256, strip metadata, edit metadata, watermark teks/gambar gravity 9-arah, page numbering/Bates dengan template `{n}`/`{total}`/`{page}` + skip-first-N + opacity, redact via `Page.search_for(term)` + `add_redact_annot` + `apply_redactions`), dan operasi pdf→folder (split, extract_images dengan dedupe by xref, extract_attachments via `embfile_*`).
+- PDF engine nyata via PyMuPDF + qpdf + pdf2docx: render halaman PDF ke PNG/JPG, ekstrak ke TXT/HTML, plus PDF→DOCX (pdf2docx) dan PDF→EPUB (hand-rolled minimal EPUB 2 builder `_write_epub`). Operasi PDF→PDF (extract pages, reorder, rotate, compress, compress_images dengan downsample DPI + JPEG re-encode, linearize via `qpdf --linearize`, repair via qpdf, encrypt/decrypt AES-256, strip metadata, edit metadata, watermark teks/gambar gravity 9-arah, page numbering/Bates dengan template `{n}`/`{total}`/`{page}` + skip-first-N + opacity, redact via `Page.search_for(term)` + `add_redact_annot` + `apply_redactions`). Operasi pdf→folder (split dengan tiga mode: every_n / range / size, extract_images dengan dedupe by xref, extract_attachments via `embfile_*`).
 - UI PySide6 dengan sidebar.
 - Icon pack `qtawesome`.
 - App logo SVG and hicolor PNG icon assets.
@@ -58,6 +58,7 @@ Sidebar menu:
 - PDF Extract Attachments
 - Document Merge
 - Slides to Images
+- Subtitle Extract
 - Video Concat
 - Audio Mix
 - Image Montage
@@ -183,7 +184,7 @@ cd /home/sarta/Project/trex-converter
 Current expected result:
 
 ```text
-327 passed
+353 passed
 ```
 
 ## System Dependencies
@@ -223,8 +224,8 @@ Development dependencies:
 ## Next Likely Work
 
 Roadmap lengkap dengan checklist `[x]/[~]/[ ]` ada di `next-development.md`. Highlight item terbesar yang masih `[ ]`:
-- PDF Tools: PDF→DOCX/EPUB, A/B compare, split-by-file-size, image-downsample compress, qpdf linearize. (Merge, split-by-range/N, watermark image, page numbering, extract_images, extract_attachments, redaction sudah selesai.)
-- Video: stream-copy trim, two-pass target-size compress, subtitle extract dari MKV, hardware accel detect.
+- PDF Tools: A/B compare (visual diff) — satu-satunya item PDF yang masih `[ ]`. (DOCX, EPUB, split by range/N/size, image-downsample compress, qpdf linearize, plus semua operasi sebelumnya sudah selesai.)
+- Video roadmap fully closed: trim (stream-copy + re-encode), concat, two-pass target-size, resolution preset, subtitle extract, subtitle burn-in, GIF/WebP, contact sheet, watermark text/logo, reverse, speed change, hwaccel detect.
 - SVG / Vector Tools Wave 1 + 2 + 3 sudah lengkap (11 fitur). Pairs aktif: svg → png/pdf/svg/eps/ps/emf/wmf/dxf, pdf → svg, dxf → svg, dan 8 bitmap → svg (via potrace trace pipeline). Options: text_to_path, export_id (+only), inkscape_dxf_format (R14/R12), trace_threshold/turdsize/alphamax. Tidak ada item SVG yang tersisa di roadmap.
 - Modul baru §7: Ebook (Pandoc/Calibre), Metadata cross-cut (exiftool).
 - Cross-cutting §8: preview/details panel per task, batch drag-and-drop multi-file, preset save/load per modul, packaging `.deb` final.
