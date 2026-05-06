@@ -42,6 +42,7 @@ Sudah ada:
 - UI PySide6 dengan sidebar.
 - Icon pack `qtawesome`.
 - App logo SVG and hicolor PNG icon assets.
+- In-app documentation system: `app/docs/` package dengan 31 topics × 2 bahasa (en/id) sebagai bundled markdown (loaded via `importlib.resources`, declared di `pyproject.toml` package-data). `HelpPage` widget dengan QTextBrowser + language toggle EN/ID + realtime search dropdown (QCompleter MatchContains, "Topic > Section" entries). Sidebar mode-switch via QStackedWidget — sidebar yang sama swap antara main nav dan docs nav (entry "Need Help ?" + tombol "← Back to main menu"). Tombol "?" di setiap conversion page nge-emit signal yang switch sidebar ke docs mode di topic relevan. Sync test guard di `tests/test_docs/test_sync.py`.
 - Test suite pytest.
 
 ## UI Direction
@@ -76,6 +77,7 @@ Sidebar menu:
 - Archive Compress
 - QR / Barcode
 - SVG / Vector
+- Need Help ?
 - Settings
 - About
 
@@ -193,7 +195,7 @@ cd /home/sarta/Project/trex-converter
 Current expected result:
 
 ```text
-401 passed
+412 passed
 ```
 
 ## System Dependencies

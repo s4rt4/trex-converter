@@ -11,7 +11,7 @@ from app.ui.icons import ICON_SIZE, accent_icon, surface_icon
 from app.ui.queue_panel import QueuePanel
 
 try:
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import Qt, Signal
     from PySide6.QtWidgets import (
         QCheckBox,
         QComboBox,
@@ -57,6 +57,8 @@ class ConversionPageConfig:
 
 
 class ConversionPage(QWidget):
+    help_requested = Signal(str)  # emits config.kind when the user clicks "?"
+
     def __init__(
         self,
         config: ConversionPageConfig,
@@ -87,9 +89,20 @@ class ConversionPage(QWidget):
         root.setContentsMargins(16, 14, 16, 14)
         root.setSpacing(10)
 
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
         title = QLabel(config.title, self)
         title.setObjectName("PageTitle")
-        root.addWidget(title)
+        title_row.addWidget(title)
+        title_row.addStretch(1)
+
+        self.help_button = QToolButton(self)
+        self.help_button.setObjectName("PageHelpButton")
+        self.help_button.setText("?")
+        self.help_button.setToolTip("Open documentation for this page")
+        self.help_button.clicked.connect(self._open_help)
+        title_row.addWidget(self.help_button)
+        root.addLayout(title_row)
 
         self.page_tabs = QTabWidget(self)
         self.page_tabs.setObjectName("PageTabs")
@@ -724,6 +737,13 @@ class ConversionPage(QWidget):
             return
         delete_preset(self.config.kind, str(name))
         self._refresh_presets()
+
+    # ---- Help ------------------------------------------------------------
+
+    def _open_help(self) -> None:
+        # MainWindow listens to this and switches to docs mode for the
+        # matching topic.
+        self.help_requested.emit(self.config.kind)
 
     # ---- Drag & drop -----------------------------------------------------
 

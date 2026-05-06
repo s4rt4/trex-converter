@@ -26,6 +26,7 @@ from app.ui.multi_input_options import (
 from app.ui.ocr_options import OCROptionsPanel
 from app.ui.pdf_operations import PDFOperationsPanel
 from app.ui.ebook_options import EbookOptionsPanel
+from app.ui.help_page import HelpPage
 from app.ui.metadata_options import MetadataOptionsPanel
 from app.ui.qr_options import QROptionsPanel
 from app.ui.svg_options import SVGOptionsPanel
@@ -368,6 +369,10 @@ class MainWindow(QMainWindow):
         layout.setSpacing(0)
 
         self.stack = QStackedWidget(root)
+        # HelpPage is constructed early so the sidebar's docs-mode list can
+        # query its topic metas during sidebar construction.
+        self.help_page = HelpPage(self.stack)
+
         sidebar = self._build_sidebar()
         layout.addWidget(sidebar)
 
@@ -389,6 +394,7 @@ class MainWindow(QMainWindow):
                 on_retry=self._retry_task,
                 parent=self.stack,
             )
+            page.help_requested.connect(self._open_help_for_kind)
             self.pages.append(page)
             self.task_views.append(page)
             self.stack.addWidget(page)
@@ -400,6 +406,9 @@ class MainWindow(QMainWindow):
         about = AboutPage(self.stack)
         self.task_views.append(about)
         self.stack.addWidget(about)
+
+        self.help_page_index = self.stack.addWidget(self.help_page)
+
         layout.addWidget(self.stack, 1)
 
         self.setCentralWidget(root)
@@ -415,18 +424,12 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self._build_sidebar_brand(sidebar))
 
-        self.nav = QListWidget(sidebar)
-        self.nav.setObjectName("SidebarNav")
-        self.nav.setIconSize(SIDEBAR_ICON_SIZE)
-        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.nav.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
-        self.nav.addItem(QListWidgetItem(_page_icon("dashboard"), "Dashboard"))
-        for config in PAGE_CONFIGS:
-            self.nav.addItem(QListWidgetItem(_page_icon(config.kind), config.title))
-        self.nav.addItem(QListWidgetItem(_page_icon("settings"), "Settings"))
-        self.nav.addItem(QListWidgetItem(_page_icon("about"), "About"))
-        self.nav.currentRowChanged.connect(self.stack_index_changed)
-        layout.addWidget(self.nav, 1)
+        self.nav_stack = QStackedWidget(sidebar)
+        self.nav_stack.setObjectName("SidebarStack")
+        layout.addWidget(self.nav_stack, 1)
+
+        self.nav_stack.addWidget(self._build_main_nav(sidebar))
+        self.nav_stack.addWidget(self._build_docs_nav(sidebar))
 
         footer = QWidget(sidebar)
         footer_layout = QHBoxLayout(footer)
@@ -441,8 +444,98 @@ class MainWindow(QMainWindow):
         footer_layout.addWidget(deps_button)
         layout.addWidget(footer)
 
+        # Default: main mode, Dashboard selected.
         self.nav.setCurrentRow(0)
         return sidebar
+
+    def _build_main_nav(self, parent: QWidget) -> QWidget:
+        self.nav = QListWidget(parent)
+        self.nav.setObjectName("SidebarNav")
+        self.nav.setIconSize(SIDEBAR_ICON_SIZE)
+        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.nav.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        self.nav.addItem(QListWidgetItem(_page_icon("dashboard"), "Dashboard"))
+        for config in PAGE_CONFIGS:
+            self.nav.addItem(QListWidgetItem(_page_icon(config.kind), config.title))
+        self.nav.addItem(QListWidgetItem(_page_icon("settings"), "Settings"))
+        self.nav.addItem(QListWidgetItem(_page_icon("about"), "About"))
+        # Sentinel: "Need Help ?" — selecting it switches the sidebar to docs
+        # mode and the right pane to the HelpPage.
+        help_item = QListWidgetItem(_page_icon("help"), "Need Help ?")
+        help_item.setData(Qt.ItemDataRole.UserRole, "help-entry")
+        self.nav.addItem(help_item)
+        self.nav.currentRowChanged.connect(self.stack_index_changed)
+        return self.nav
+
+    def _build_docs_nav(self, parent: QWidget) -> QWidget:
+        container = QWidget(parent)
+        container.setObjectName("DocsNavContainer")
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        back_button = QPushButton("← Back to main menu", container)
+        back_button.setObjectName("DocsBackButton")
+        back_button.clicked.connect(self._exit_docs_mode)
+        layout.addWidget(back_button)
+
+        self.docs_nav = QListWidget(container)
+        self.docs_nav.setObjectName("SidebarNav")
+        self.docs_nav.setIconSize(SIDEBAR_ICON_SIZE)
+        self.docs_nav.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.docs_nav.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        self.docs_nav.currentRowChanged.connect(self._docs_nav_changed)
+        layout.addWidget(self.docs_nav, 1)
+
+        self._populate_docs_nav()
+        return container
+
+    def _populate_docs_nav(self) -> None:
+        """Rebuild the docs sidebar list using HelpPage's current language."""
+        self.docs_nav.blockSignals(True)
+        self.docs_nav.clear()
+        self._docs_nav_slugs: list[str] = []
+        for topic in self.help_page.topic_metas():
+            self.docs_nav.addItem(QListWidgetItem(topic.title))
+            self._docs_nav_slugs.append(topic.slug)
+        self.docs_nav.blockSignals(False)
+
+    def _enter_docs_mode(self, slug: str | None = None) -> None:
+        # Refresh in case the language toggle changed the topic list.
+        self._populate_docs_nav()
+        self.nav_stack.setCurrentIndex(1)
+        self.stack.setCurrentIndex(self.help_page_index)
+        target = slug or "_index"
+        if target in self._docs_nav_slugs:
+            self.docs_nav.blockSignals(True)
+            self.docs_nav.setCurrentRow(self._docs_nav_slugs.index(target))
+            self.docs_nav.blockSignals(False)
+        self.help_page.show_topic(target)
+
+    def _exit_docs_mode(self) -> None:
+        self.nav_stack.setCurrentIndex(0)
+        # Restore last non-help main row, defaulting to Dashboard.
+        target_row = getattr(self, "_last_main_row", 0)
+        if target_row < 0 or target_row >= self.nav.count() - 1:
+            target_row = 0
+        self.nav.blockSignals(True)
+        self.nav.setCurrentRow(target_row)
+        self.nav.blockSignals(False)
+        self.stack.setCurrentIndex(target_row)
+
+    def _docs_nav_changed(self, row: int) -> None:
+        if 0 <= row < len(self._docs_nav_slugs):
+            self.help_page.show_topic(self._docs_nav_slugs[row])
+
+    def _open_help_for_kind(self, kind: str) -> None:
+        # Most page kinds match the doc slug 1:1; record exceptions here.
+        slug_map = {
+            "pdf": "pdf-tools",
+        }
+        slug = slug_map.get(kind, kind)
+        self._enter_docs_mode(slug=slug)
 
     def _build_sidebar_brand(self, parent: QWidget) -> QWidget:
         brand = QWidget(parent)
@@ -464,8 +557,14 @@ class MainWindow(QMainWindow):
         return brand
 
     def stack_index_changed(self, row: int) -> None:
-        if row >= 0:
-            self.stack.setCurrentIndex(row)
+        if row < 0:
+            return
+        item = self.nav.item(row)
+        if item is not None and item.data(Qt.ItemDataRole.UserRole) == "help-entry":
+            self._enter_docs_mode()
+            return
+        self._last_main_row = row
+        self.stack.setCurrentIndex(row)
 
     def _build_status_bar(self) -> None:
         self.statusBar().showMessage("Ready")
@@ -660,6 +759,75 @@ class MainWindow(QMainWindow):
             #HintLabel {
                 color: $BRAND_DARK_SOFT;
                 font-size: 11px;
+            }
+            #DocsBackButton {
+                background: rgba(36, 21, 143, 128);
+                color: $BRAND_ACCENT;
+                border: 1px solid rgba(86, 182, 198, 128);
+                border-radius: 8px;
+                padding: 6px 10px;
+                font-weight: 650;
+                text-align: left;
+            }
+            #DocsBackButton:hover {
+                background: rgba(86, 182, 198, 90);
+                color: $BRAND_SURFACE;
+            }
+            #PageHelpButton {
+                background: rgba(86, 182, 198, 60);
+                color: $BRAND_DARK;
+                border: 1px solid rgba(86, 182, 198, 145);
+                border-radius: 14px;
+                min-width: 26px;
+                min-height: 26px;
+                font-weight: 800;
+            }
+            #PageHelpButton:hover {
+                background: $BRAND_DARK;
+                color: $BRAND_ACCENT;
+            }
+            #HelpLanguageButton {
+                padding: 6px 14px;
+                border-radius: 8px;
+                border: 1px solid rgba(86, 182, 198, 145);
+                background: rgba(228, 215, 189, 150);
+                color: $BRAND_DARK;
+                font-weight: 650;
+            }
+            #HelpLanguageButton:checked {
+                background: $BRAND_DARK;
+                color: $BRAND_ACCENT;
+                border: 1px solid $BRAND_DARK;
+            }
+            #HelpSearch {
+                padding: 6px 10px;
+                border-radius: 8px;
+            }
+            #HelpBrowser {
+                background: $BRAND_SURFACE_SOFT;
+                border: 1px solid rgba(86, 182, 198, 145);
+                border-radius: 8px;
+                padding: 8px 12px;
+                color: $BRAND_DARK;
+            }
+            #HelpBrowser a {
+                color: $BRAND_DARK;
+                text-decoration: underline;
+            }
+            #HelpSearchPopup {
+                background: $BRAND_SURFACE_SOFT;
+                border: 1px solid rgba(86, 182, 198, 145);
+                border-radius: 8px;
+                padding: 4px;
+            }
+            #HelpSearchPopup::item {
+                padding: 6px 8px;
+                color: $BRAND_DARK;
+            }
+            #HelpSearchPopup::item:selected {
+                background: $BRAND_DARK;
+                color: $BRAND_ACCENT;
+                border-radius: 6px;
             }
             #AboutName {
                 color: $BRAND_TEXT;
@@ -1124,5 +1292,7 @@ def _page_icon(kind: str):
         "ebook": "fa5s.book",
         "pdf-compare": "fa5s.balance-scale",
         "metadata": "fa5s.tags",
+        "help": "fa5s.question-circle",
+        "docs-topic": "fa5s.book-open",
     }
     return nav_icon(icons.get(kind, "fa5s.file"))
