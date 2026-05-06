@@ -1,26 +1,35 @@
 #!/bin/sh
+# Post-installation script for t-rex-converter.
+#
+# Detects missing engine binaries (Recommends, so apt may have skipped some)
+# and surfaces a clear, prominently-formatted summary plus copy-pastable
+# install commands. The same dependency check also runs at app launch via
+# app/main.py so the user sees a Qt dialog if they later remove a dep.
+
 set -e
 
-# Tell users about optional engine binaries that aren't satisfied via Depends.
-# These are listed under Recommends so apt usually installs them, but we
-# warn explicitly when a particular module won't work without them.
+MISSING_BINS=""
+note_missing() {
+    MISSING_BINS="${MISSING_BINS}  - $1 - needed for $2
+"
+}
 
 check() {
     if ! command -v "$1" >/dev/null 2>&1; then
-        echo "T-Rex Converter: $1 missing — $2 will not work"
+        note_missing "$1" "$2"
     fi
 }
 
 # Hard requirements (also in Depends; warn just in case Depends was bypassed).
 check ffmpeg "Video / Audio modules"
-check libreoffice "Document module"
+check libreoffice "Document / Slides modules"
 check tesseract "OCR module"
 check qpdf "PDF repair / linearize"
 check magick "Image module (ImageMagick)"
 
-# Optional — installed via Recommends.
+# Optional - installed via Recommends.
 check inkscape "SVG / Vector module"
-check potrace "SVG → pixmap trace"
+check potrace "SVG pixmap-to-vector trace"
 check pandoc "Ebook module"
 check exiftool "Metadata module"
 check qrencode "QR generate"
@@ -34,21 +43,62 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     gtk-update-icon-cache -q -t /usr/share/icons/hicolor || true
 fi
 
+print_banner() {
+    echo "" >&2
+    echo "================================================================================" >&2
+    echo "  T-Rex Converter installed - please review setup notes below" >&2
+    echo "================================================================================" >&2
+}
+
+print_footer() {
+    echo "================================================================================" >&2
+    echo "" >&2
+}
+
+print_banner
+
+if [ -n "$MISSING_BINS" ]; then
+    echo "" >&2
+    echo "  Missing engine binaries detected:" >&2
+    echo "" >&2
+    printf "%s" "$MISSING_BINS" >&2
+    echo "" >&2
+    echo "  Install them with:" >&2
+    echo "" >&2
+    echo "    sudo apt install ffmpeg imagemagick libreoffice qpdf tesseract-ocr \\" >&2
+    echo "      inkscape potrace pandoc libimage-exiftool-perl qrencode zbar-tools \\" >&2
+    echo "      python3-tinycss2" >&2
+    echo "" >&2
+    echo "  Affected modules will fail at conversion time until these are installed." >&2
+else
+    echo "" >&2
+    echo "  All engine binaries detected. Every module is ready to use." >&2
+fi
+
 cat >&2 <<'EOF'
-T-Rex Converter installed.
 
-Three Python deps aren't packaged in Debian apt and need to be installed
-manually for the corresponding modules to work:
-    PyMuPDF  — required by every PDF feature
-    qasync   — required by the Qt event loop
-    pdf2docx — required by PDF → DOCX conversion
+  PySide6, PyMuPDF, qasync, and qtawesome are pulled in via apt as part
+  of this .deb. One Python dependency is NOT packaged in Debian apt and
+  must be installed manually for the PDF -> DOCX feature to work:
 
-Install them with pip in a virtualenv:
-    python3 -m venv ~/.venv-trex && \
-    ~/.venv-trex/bin/pip install PyMuPDF qasync pdf2docx
+      pdf2docx - PDF -> DOCX conversion (PDF Tools page only)
 
-Then launch via:
-    ~/.venv-trex/bin/t-rex-converter
+  Install it system-wide with:
+
+      sudo apt install python3-pip
+      sudo pip install --break-system-packages pdf2docx
+
+  Or in an isolated virtualenv (safer):
+
+      python3 -m venv --system-site-packages ~/.venv-trex && \
+        ~/.venv-trex/bin/pip install pdf2docx
+      ~/.venv-trex/bin/t-rex-converter
+
+  Without pdf2docx the app still launches; only PDF -> DOCX conversion
+  fails. The launcher pops a clear Qt dialog at startup whenever a
+  dependency is missing, so you can use the dialog as a checklist.
+
 EOF
+print_footer
 
 exit 0

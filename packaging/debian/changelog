@@ -1,3 +1,26 @@
+t-rex-converter (1.0.0-1) unstable; urgency=medium
+
+  * 1.0 release. Roadmap fully closed across every module: Image,
+    Video, Audio, Document, OCR, PDF Tools (DOCX, EPUB, A/B compare,
+    split-by-size, image-downsample, linearize), Subtitle, Archive,
+    QR, SVG / Vector (Wave 1+2+3), Ebook (Pandoc), Metadata (exiftool).
+  * In-app documentation system: 31 topics x 2 languages (EN / ID)
+    bundled as markdown via importlib.resources, with a sidebar
+    mode-switch ("Need Help ?" entry), realtime QCompleter search,
+    and a "?" button on every conversion page that jumps straight to
+    the matching topic.
+  * Smart launch-time dependency check: app/main.py now detects
+    missing Python deps (PySide6, qasync, PyMuPDF, pdf2docx) and
+    surfaces a clear Qt dialog with copy-pastable install commands
+    instead of crashing or printing to a stderr the user never sees.
+    If even PySide6 is missing, falls back to zenity / xmessage when
+    available and finally to stderr.
+  * postinst banner reformatted with a visible boxed summary listing
+    every missing engine binary plus the pip command for the three
+    Python deps not packaged in Debian apt (PyMuPDF, qasync, pdf2docx).
+
+ -- T-Rex Converter Maintainers <maintainers@example.invalid>  Wed, 06 May 2026 16:16:05 +0700
+
 t-rex-converter (0.4.0-1) unstable; urgency=medium
 
   * Initial Debian packaging release with full module surface:

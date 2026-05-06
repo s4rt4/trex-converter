@@ -10,3 +10,12 @@ dist/
 *.sqlite3
 *.db
 .DS_Store
+
+# Debian build artefacts (created by packaging/build-deb.sh)
+.pybuild/
+packaging/debian/.debhelper/
+packaging/debian/debhelper-build-stamp
+packaging/debian/files
+packaging/debian/*.debhelper
+packaging/debian/t-rex-converter.substvars
+packaging/debian/t-rex-converter/
