@@ -1,3 +1,18 @@
+t-rex-converter (1.0.3-1) unstable; urgency=medium
+
+  * Critical fix: app crashed on launch with "TypeError: NoneType
+    takes no arguments" because PySide6.QtCharts is shipped in a
+    separate Debian package not pulled by python3-pyside6.qtwidgets.
+    Add python3-pyside6.qtcharts and python3-pyside6.qtsvg + libqt6svg6
+    (for SVG logo rendering) to Depends, and split the dashboard's
+    QtCharts try/except so a missing QtCharts no longer nulls the
+    QtWidgets imports it shares with QtCharts.
+  * Dashboard chart tab now degrades gracefully with a placeholder
+    label when QtCharts isn't installed instead of taking the whole
+    app down.
+
+ -- T-Rex Converter Maintainers <maintainers@example.invalid>  Wed, 07 May 2026 06:30:00 +0700
+
 t-rex-converter (1.0.2-1) unstable; urgency=medium
 
   * Fix: Ignore on the optional-dependencies dialog now actually opens

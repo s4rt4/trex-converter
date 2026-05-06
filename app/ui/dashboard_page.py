@@ -6,6 +6,21 @@ from app.core.task import Task, TaskStatus
 from app.data.database import TaskRepository
 from app.ui.queue_panel import QueuePanel
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPainter
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QListView,
+    QPushButton,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
 try:
     from PySide6.QtCharts import (
         QBarCategoryAxis,
@@ -15,24 +30,10 @@ try:
         QChartView,
         QValueAxis,
     )
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QPainter
-    from PySide6.QtWidgets import (
-        QComboBox,
-        QFrame,
-        QGridLayout,
-        QHBoxLayout,
-        QLabel,
-        QListView,
-        QPushButton,
-        QTabWidget,
-        QVBoxLayout,
-        QWidget,
-    )
+    HAS_QTCHARTS = True
 except ImportError:  # pragma: no cover
-    Qt = QPainter = None
     QBarCategoryAxis = QBarSeries = QBarSet = QChart = QChartView = QValueAxis = None
-    QComboBox = QFrame = QGridLayout = QHBoxLayout = QLabel = QListView = QPushButton = QTabWidget = QVBoxLayout = QWidget = None
+    HAS_QTCHARTS = False
 
 
 # (binary, "module label shown to the user")
@@ -160,6 +161,19 @@ class DashboardPage(QWidget):
         layout.setContentsMargins(0, 12, 0, 0)
         layout.setSpacing(10)
 
+        if not HAS_QTCHARTS:
+            self._chart = None
+            self._chart_view = None
+            placeholder = QLabel(
+                "PySide6.QtCharts is not installed - chart view is unavailable. "
+                "Install via:\n\n"
+                "    sudo apt install python3-pyside6.qtcharts",
+                page,
+            )
+            placeholder.setWordWrap(True)
+            layout.addWidget(placeholder, 1)
+            return page
+
         controls = QHBoxLayout()
         controls.setSpacing(8)
         controls.addWidget(_field("Bucket", page))
@@ -219,6 +233,8 @@ class DashboardPage(QWidget):
                 )
 
     def _refresh_chart(self, *_args) -> None:
+        if not HAS_QTCHARTS or self._chart is None:
+            return
         if self._repository is None:
             return
         granularity = self.granularity_combo.currentData() or "day"
