@@ -1,3 +1,14 @@
+t-rex-converter (1.0.5-1) unstable; urgency=medium
+
+  * Cosmetic fix: FieldLabel widgets (the bold caption above each form
+    input on OCR / Subtitle / Audio Mix / Image Montage / etc panels)
+    rendered with a thin teal box on Debian Trixie because the panel's
+    QWidget cascade gave them a soft background that Qt's Fusion style
+    then framed. Explicit border: 0; padding: 0; background:
+    transparent on #FieldLabel removes the box.
+
+ -- T-Rex Converter Maintainers <maintainers@example.invalid>  Wed, 07 May 2026 07:50:00 +0700
+
 t-rex-converter (1.0.4-1) unstable; urgency=medium
 
   * Fix Check Dependencies dialog reporting "python:fitz: missing" on

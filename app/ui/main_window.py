@@ -851,6 +851,9 @@ class MainWindow(QMainWindow):
                 color: $BRAND_DARK;
                 font-size: 12px;
                 font-weight: 650;
+                background: transparent;
+                border: 0;
+                padding: 0;
             }
             QLineEdit,
             QComboBox {
