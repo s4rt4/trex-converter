@@ -12,6 +12,14 @@ class DependencyStatus:
     path: str | None
 
 
+PYTHON_MODULE_ALIASES: dict[str, tuple[str, ...]] = {
+    # PyMuPDF: Debian Trixie ships only `pymupdf`; older pip wheels only
+    # ship `fitz`; modern wheels ship both. Either satisfies the dep.
+    "fitz": ("pymupdf", "fitz"),
+    "pymupdf": ("pymupdf", "fitz"),
+}
+
+
 class DependencyChecker:
     def __init__(self, aliases: dict[str, tuple[str, ...]] | None = None) -> None:
         self.aliases = aliases or {
@@ -25,11 +33,13 @@ class DependencyChecker:
 
         if binary.startswith("python:"):
             module_name = binary.split(":", 1)[1]
-            return DependencyStatus(
-                binary=binary,
-                available=find_spec(module_name) is not None,
-                path=module_name,
-            )
+            candidates = PYTHON_MODULE_ALIASES.get(module_name, (module_name,))
+            for candidate in candidates:
+                if find_spec(candidate) is not None:
+                    return DependencyStatus(
+                        binary=binary, available=True, path=candidate
+                    )
+            return DependencyStatus(binary=binary, available=False, path=None)
 
         candidates = self.aliases.get(binary, (binary,))
         for candidate in candidates:

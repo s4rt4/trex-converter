@@ -1,3 +1,13 @@
+t-rex-converter (1.0.4-1) unstable; urgency=medium
+
+  * Fix Check Dependencies dialog reporting "python:fitz: missing" on
+    Debian Trixie. The PDFEngine declares requires_binary="python:fitz"
+    but Debian python3-pymupdf 1.25 ships only `pymupdf` (legacy `fitz`
+    alias removed). DependencyChecker now treats `fitz` and `pymupdf`
+    as aliases of each other so either module satisfies the dep.
+
+ -- T-Rex Converter Maintainers <maintainers@example.invalid>  Wed, 07 May 2026 07:00:00 +0700
+
 t-rex-converter (1.0.3-1) unstable; urgency=medium
 
   * Critical fix: app crashed on launch with "TypeError: NoneType
