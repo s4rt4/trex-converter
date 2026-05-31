@@ -1,3 +1,56 @@
+t-rex-converter (1.0.7-1) unstable; urgency=medium
+
+  * Sidebar redesign: the ~30 flat entries are now grouped into eight
+    collapsible categories (Image, Video, Audio, Document, PDF, Subtitle,
+    Archive, Utility) via a tree, with clean rounded selection (no stray
+    accent bar in the indent column).
+  * Tabs restyled from pill/buttons to a flat underline style across all
+    tab bars (page tabs and per-page option tabs): the active tab is marked
+    by an accent underline on a single baseline.
+  * Spin (increment/decrement) buttons on number fields now render proper
+    caret arrows that fit the rounded field, instead of broken default
+    boxes (caret images shipped in assets/, paths injected at runtime).
+  * Settings: conversion defaults (image quality, audio bitrate, OCR
+    language & render DPI, video CRF & x264 preset) now actually seed the
+    matching conversion pages — previously they were saved but unused.
+    Added a "System & maintenance" section (version, config/settings paths,
+    open config/output folder, restore defaults).
+  * About: enriched with the engine list, tech stack, privacy note and
+    project links; the version is now read from the package metadata
+    (a single source of truth via app.__version__) instead of a stale
+    hard-coded string.
+  * Transparent app icons (no white box behind the logo).
+
+ -- T-Rex Converter Maintainers <maintainers@example.invalid>  Sun, 31 May 2026 22:10:21 +0700
+
+t-rex-converter (1.0.6-1) unstable; urgency=medium
+
+  * Dependency checker is now LibreOffice-component aware. A `libreoffice`
+    binary on PATH no longer counts as "all document conversion works":
+    DependencyChecker resolves the LibreOffice program directory and probes
+    per-component markers via synthetic tokens libreoffice:writer/calc/
+    impress, so the Check Dependencies dialog warns up front when only some
+    components are installed (e.g. headless-only setups). Friendly labels
+    via dependency_label().
+  * Narrow the LibreOffice dependency from the full `libreoffice`
+    metapackage to the components actually used: libreoffice-writer,
+    libreoffice-calc, libreoffice-impress. Avoids pulling Base/Math/Draw
+    and their launcher entries on install.
+  * Internal: extract the ~610-line QSS stylesheet from main_window.py into
+    theme.build_stylesheet(); replace the task queue's busy-wait polling
+    with an asyncio.Semaphore + idle Event; track fire-and-forget emit
+    tasks so they cannot be garbage-collected mid-flight. No behavior
+    change for users.
+  * Docs: README version and engine list refreshed (pandoc / inkscape /
+    exiftool), plus scripts/hide-libreoffice-launcher.sh for hiding
+    LibreOffice from the app launcher while keeping it for headless use.
+  * Fix opaque white background on the hicolor PNG app icons (visible as a
+    white box behind the logo in the window title bar / taskbar).
+    scripts/generate-icons.sh now renders with `-background none` so the
+    SVG's transparency is preserved.
+
+ -- T-Rex Converter Maintainers <maintainers@example.invalid>  Sun, 31 May 2026 20:44:21 +0700
+
 t-rex-converter (1.0.5-1) unstable; urgency=medium
 
   * Cosmetic fix: FieldLabel widgets (the bold caption above each form

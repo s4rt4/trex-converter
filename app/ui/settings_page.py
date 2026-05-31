@@ -4,7 +4,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from app.core.settings import CONFIG_DIR, Settings, get_settings, set_settings
+from app import __version__
+from app.core.settings import (
+    CONFIG_DIR,
+    SETTINGS_PATH,
+    Settings,
+    get_settings,
+    set_settings,
+)
 
 try:
     from PySide6.QtWidgets import (
@@ -162,9 +169,10 @@ class SettingsPage(QWidget):
         row += 1
 
         info = QLabel(
-            "Concurrency change applies on next launch. Defaults seed each "
-            "conversion page when an input is selected — the per-page panel "
-            "still wins if the user changes it.",
+            "Concurrency change applies on next launch. The defaults above seed "
+            "each conversion page (quality, audio bitrate, OCR language & DPI, "
+            "video CRF & preset) — the per-page panel still wins if you change "
+            "it there.",
             panel,
         )
         info.setWordWrap(True)
@@ -172,11 +180,48 @@ class SettingsPage(QWidget):
         grid.addWidget(info, row, 0, 1, 2)
         row += 1
 
+        # ---- System & maintenance ----
+        grid.addWidget(_section("System & maintenance", panel), row, 0, 1, 2)
+        row += 1
+        grid.addWidget(_field("Version", panel), row, 0)
+        grid.addWidget(QLabel(__version__, panel), row, 1)
+        row += 1
+        grid.addWidget(_field("Config folder", panel), row, 0)
+        config_path_label = QLabel(str(CONFIG_DIR), panel)
+        config_path_label.setObjectName("HintLabel")
+        config_path_label.setWordWrap(True)
+        config_path_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        grid.addWidget(config_path_label, row, 1)
+        row += 1
+        grid.addWidget(_field("Settings file", panel), row, 0)
+        settings_path_label = QLabel(str(SETTINGS_PATH), panel)
+        settings_path_label.setObjectName("HintLabel")
+        settings_path_label.setWordWrap(True)
+        settings_path_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        grid.addWidget(settings_path_label, row, 1)
+        row += 1
+
+        maintenance_row = QHBoxLayout()
+        maintenance_row.setSpacing(8)
+        open_config_button = QPushButton("Open config folder", panel)
+        open_config_button.clicked.connect(self._open_config_dir)
+        open_output_button = QPushButton("Open output folder", panel)
+        open_output_button.clicked.connect(self._open_output_dir)
+        maintenance_row.addWidget(open_config_button)
+        maintenance_row.addWidget(open_output_button)
+        maintenance_row.addStretch(1)
+        grid.addLayout(maintenance_row, row, 0, 1, 2)
+        row += 1
+
         # ---- Action row ----
         action_row = QHBoxLayout()
-        reveal_button = QPushButton("Open config folder", panel)
-        reveal_button.clicked.connect(self._open_config_dir)
-        action_row.addWidget(reveal_button)
+        restore_button = QPushButton("Restore defaults", panel)
+        restore_button.clicked.connect(self._restore_defaults)
+        action_row.addWidget(restore_button)
         action_row.addStretch(1)
         save_button = QPushButton("Save", panel)
         save_button.clicked.connect(self._save)
@@ -223,6 +268,31 @@ class SettingsPage(QWidget):
                 f"Could not launch file manager: {exc}\n\n{CONFIG_DIR}",
             )
 
+    def _open_output_dir(self) -> None:
+        # Use the configured default output folder, or the home directory when
+        # it's left blank (meaning "same folder as input").
+        target = self.output_dir_input.text().strip() or str(Path.home())
+        path = Path(target)
+        if not path.is_dir():
+            QMessageBox.information(
+                self,
+                "Output folder",
+                f"Folder does not exist yet:\n{path}",
+            )
+            return
+        opener = self._file_opener()
+        if opener is None:
+            QMessageBox.information(self, "Output folder", f"Output folder:\n{path}")
+            return
+        try:
+            subprocess.Popen([opener, str(path)])
+        except OSError as exc:
+            QMessageBox.warning(
+                self,
+                "Open failed",
+                f"Could not launch file manager: {exc}\n\n{path}",
+            )
+
     @staticmethod
     def _file_opener() -> str | None:
         if sys.platform == "darwin":
@@ -242,7 +312,14 @@ class SettingsPage(QWidget):
             self.ocr_language_custom.clear()
 
     def _reset_form(self) -> None:
-        current = get_settings()
+        self._populate_from(get_settings())
+
+    def _restore_defaults(self) -> None:
+        # Load built-in defaults into the form (not saved until the user hits
+        # Save), so it's easy to undo experiments.
+        self._populate_from(Settings())
+
+    def _populate_from(self, current: Settings) -> None:
         self.output_dir_input.setText(current.output_dir)
         self.concurrency_input.setValue(current.max_concurrency)
         self.image_quality_slider.setValue(current.default_image_quality)

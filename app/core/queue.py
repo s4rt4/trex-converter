@@ -30,6 +30,10 @@ class TaskQueue:
         self._pending: asyncio.Queue[str] = asyncio.Queue()
         self._running: dict[str, asyncio.Task[None]] = {}
         self._running_engines: dict[str, BaseEngine] = {}
+        self._slots = asyncio.Semaphore(max_concurrency)
+        self._idle = asyncio.Event()
+        self._idle.set()
+        self._background: set[asyncio.Task[None]] = set()
         self._repository = repository
         self._callbacks: list[TaskEventCallback] = []
         self._dispatcher: asyncio.Task[None] | None = None
@@ -41,6 +45,7 @@ class TaskQueue:
                 for task in self._repository.pending_for_resume():
                     self._tasks[task.id] = task
                     self._pending.put_nowait(task.id)
+                    self._idle.clear()
 
     @property
     def max_concurrency(self) -> int:
@@ -60,6 +65,7 @@ class TaskQueue:
             raise ValueError(f"Task already exists: {task.id}")
         self._tasks[task.id] = task
         self._persist(task)
+        self._idle.clear()
         self._pending.put_nowait(task.id)
         self._ensure_dispatcher()
         self._emit_nowait(task)
@@ -86,14 +92,14 @@ class TaskQueue:
         task = self.get(task_id)
         task.reset_for_retry()
         self._persist(task)
+        self._idle.clear()
         self._pending.put_nowait(task.id)
         self._ensure_dispatcher()
         self._emit_nowait(task)
         return task
 
     async def wait_idle(self) -> None:
-        while not self._pending.empty() or self._running:
-            await asyncio.sleep(0.01)
+        await self._idle.wait()
 
     async def close(self) -> None:
         self._closed = True
@@ -103,6 +109,9 @@ class TaskQueue:
         if self._dispatcher:
             self._dispatcher.cancel()
             await asyncio.gather(self._dispatcher, return_exceptions=True)
+        for background in list(self._background):
+            background.cancel()
+        await asyncio.gather(*self._background, return_exceptions=True)
 
     def _ensure_dispatcher(self) -> None:
         if self._dispatcher is None or self._dispatcher.done():
@@ -114,17 +123,30 @@ class TaskQueue:
             task = self._tasks[task_id]
             if task.status != TaskStatus.PENDING:
                 self._pending.task_done()
+                self._update_idle()
                 continue
 
-            while len(self._running) >= self._max_concurrency:
-                await asyncio.sleep(0.01)
+            await self._slots.acquire()
+            if self._closed:
+                self._slots.release()
+                self._pending.task_done()
+                break
 
             worker = asyncio.create_task(self._run_task(task))
             self._running[task.id] = worker
             worker.add_done_callback(
-                lambda _, task_id=task.id: self._running.pop(task_id, None)
+                lambda _, task_id=task.id: self._on_worker_done(task_id)
             )
             self._pending.task_done()
+
+    def _on_worker_done(self, task_id: str) -> None:
+        self._running.pop(task_id, None)
+        self._slots.release()
+        self._update_idle()
+
+    def _update_idle(self) -> None:
+        if self._pending.empty() and not self._running:
+            self._idle.set()
 
     async def _run_task(self, task: Task) -> None:
         try:
@@ -168,7 +190,9 @@ class TaskQueue:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
-        loop.create_task(self._emit(task))
+        background = loop.create_task(self._emit(task))
+        self._background.add(background)
+        background.add_done_callback(self._background.discard)
 
     def _persist(self, task: Task) -> None:
         if self._repository:

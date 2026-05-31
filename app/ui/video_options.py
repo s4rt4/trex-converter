@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.core.settings import get_settings
+
 try:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import (
@@ -173,10 +175,13 @@ class VideoOptionsPanel(QWidget):
         grid = QGridLayout(page)
         _grid_setup(grid)
 
-        self.crf_slider, self.crf_label = _slider(page, 0, 51, 0)
+        _video_settings = get_settings()
+        self.crf_slider, self.crf_label = _slider(
+            page, 0, 51, _video_settings.default_video_crf
+        )
         self.compress_preset_combo = _combo(page, COMPRESS_PRESETS)
         for index, (_, value) in enumerate(COMPRESS_PRESETS):
-            if value == "medium":
+            if value == _video_settings.default_video_preset:
                 self.compress_preset_combo.setCurrentIndex(index)
                 break
 

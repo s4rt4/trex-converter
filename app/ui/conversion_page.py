@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.core.registry import ConversionRegistry
+from app.core.settings import get_settings
 from app.core.task import Task
 from app.engines.imagemagick_engine import IMAGE_FORMATS
 from app.ui.icons import ICON_SIZE, accent_icon, surface_icon
@@ -213,7 +214,9 @@ class ConversionPage(QWidget):
             bitrate_row = QHBoxLayout()
             bitrate_row.setSpacing(12)
             self.bitrate_input = QLineEdit(form_shell)
-            self.bitrate_input.setPlaceholderText("192k")
+            default_bitrate = get_settings().default_audio_bitrate
+            self.bitrate_input.setPlaceholderText(default_bitrate or "192k")
+            self.bitrate_input.setText(default_bitrate)
             bitrate_row.addWidget(self.bitrate_input)
             form.addWidget(_field_label("Audio bitrate", form_shell), row, 0)
             form.addLayout(bitrate_row, row, 1)
@@ -228,8 +231,9 @@ class ConversionPage(QWidget):
             self.quality_input = QSlider(Qt.Orientation.Horizontal, form_shell)
             self.quality_input.setObjectName("QualitySlider")
             self.quality_input.setRange(1, 100)
-            self.quality_input.setValue(85)
-            self.quality_value_label = QLabel("85", form_shell)
+            default_quality = get_settings().default_image_quality
+            self.quality_input.setValue(default_quality)
+            self.quality_value_label = QLabel(str(default_quality), form_shell)
             self.quality_value_label.setObjectName("QualityValue")
             self.quality_input.valueChanged.connect(
                 lambda value: self.quality_value_label.setText(str(value))

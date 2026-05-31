@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from string import Template
-
-from app.core.dependency import DependencyChecker
+from app.core.dependency import DependencyChecker, dependency_label
 from app.core.queue import TaskQueue
 from app.core.registry import ConversionRegistry
 from app.core.task import Task
@@ -34,15 +32,7 @@ from app.ui.settings_page import SettingsPage
 from app.ui.subtitle_options import SubtitleOptionsPanel
 from app.ui.video_options import VideoOptionsPanel
 from app.ui.icons import ICON_SIZE, SIDEBAR_ICON_SIZE, accent_icon, app_icon, icon, nav_icon, surface_icon
-from app.ui.theme import (
-    BRAND_ACCENT,
-    BRAND_DARK,
-    BRAND_DARK_SOFT,
-    BRAND_SURFACE,
-    BRAND_SURFACE_MUTED,
-    BRAND_SURFACE_SOFT,
-    BRAND_TEXT,
-)
+from app.ui.theme import build_stylesheet
 from app.utils.paths import asset_path
 
 try:
@@ -59,12 +49,14 @@ try:
         QPushButton,
         QStackedWidget,
         QToolButton,
+        QTreeWidget,
+        QTreeWidgetItem,
         QVBoxLayout,
         QWidget,
     )
 except ImportError:  # pragma: no cover
     QTimer = QPixmap = None
-    QFrame = QHBoxLayout = QLabel = QListWidget = QListWidgetItem = QMainWindow = QMessageBox = QPushButton = QStackedWidget = QToolButton = QVBoxLayout = QWidget = None
+    QFrame = QHBoxLayout = QLabel = QListWidget = QListWidgetItem = QMainWindow = QMessageBox = QPushButton = QStackedWidget = QToolButton = QTreeWidget = QTreeWidgetItem = QVBoxLayout = QWidget = None
 
 
 PAGE_CONFIGS = (
@@ -336,6 +328,24 @@ PAGE_CONFIGS = (
 )
 
 
+# Sidebar grouping: each conversion page (by `kind`) belongs to one category.
+# Categories render as collapsible parents in the sidebar tree. Order here is
+# the display order; every PAGE_CONFIGS kind must appear exactly once.
+SIDEBAR_GROUPS = (
+    ("Image", ("image", "image-montage", "svg")),
+    ("Video", ("video", "video-concat")),
+    ("Audio", ("audio", "audio-mix")),
+    ("Document", ("document", "document-merge", "ebook", "slides-to-images")),
+    ("PDF", (
+        "pdf", "pdf-merge", "pdf-split", "pdf-numbering",
+        "pdf-extract-images", "pdf-extract-attachments", "pdf-compare",
+    )),
+    ("Subtitle", ("subtitle", "subtitle-merge", "subtitle-extract")),
+    ("Archive", ("archive", "archive-compress")),
+    ("Utility", ("ocr", "qr", "metadata")),
+)
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -444,28 +454,94 @@ class MainWindow(QMainWindow):
         footer_layout.addWidget(deps_button)
         layout.addWidget(footer)
 
-        # Default: main mode, Dashboard selected.
-        self.nav.setCurrentRow(0)
+        # Default: main mode, Dashboard selected, Image group expanded.
+        self.nav.topLevelItem(1).setExpanded(True)
+        self.nav.setCurrentItem(self._dashboard_item)
         return sidebar
 
     def _build_main_nav(self, parent: QWidget) -> QWidget:
-        self.nav = QListWidget(parent)
+        self.nav = QTreeWidget(parent)
         self.nav.setObjectName("SidebarNav")
+        self.nav.setHeaderHidden(True)
+        self.nav.setColumnCount(1)
         self.nav.setIconSize(SIDEBAR_ICON_SIZE)
+        self.nav.setIndentation(16)
+        # We hide Qt's default branch arrows and use ▸/▾ text prefixes instead,
+        # which render predictably on the dark sidebar without image assets.
+        self.nav.setRootIsDecorated(False)
+        self.nav.setExpandsOnDoubleClick(False)
         self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.nav.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
-        self.nav.addItem(QListWidgetItem(_page_icon("dashboard"), "Dashboard"))
-        for config in PAGE_CONFIGS:
-            self.nav.addItem(QListWidgetItem(_page_icon(config.kind), config.title))
-        self.nav.addItem(QListWidgetItem(_page_icon("settings"), "Settings"))
-        self.nav.addItem(QListWidgetItem(_page_icon("about"), "About"))
+        self.nav.setVerticalScrollMode(QTreeWidget.ScrollMode.ScrollPerPixel)
+
+        # Map each page kind to its index in the right-hand QStackedWidget.
+        # The stack is built as: Dashboard(0), PAGE_CONFIGS(1..N), then
+        # Settings, About, Help — see _build_shell.
+        stack_index = {config.kind: i + 1 for i, config in enumerate(PAGE_CONFIGS)}
+        title_for = {config.kind: config.title for config in PAGE_CONFIGS}
+
+        self._nav_index_items: dict[int, QTreeWidgetItem] = {}
+        self._dashboard_item = self._add_nav_leaf(
+            None, "Dashboard", _page_icon("dashboard"), 0
+        )
+
+        for group_title, kinds in SIDEBAR_GROUPS:
+            group_item = QTreeWidgetItem(self.nav, [f"▸ {group_title}"])
+            group_item.setFlags(Qt.ItemFlag.ItemIsEnabled)  # header: not selectable
+            group_item.setData(0, Qt.ItemDataRole.UserRole + 1, group_title)
+            font = group_item.font(0)
+            font.setBold(True)
+            group_item.setFont(0, font)
+            for kind in kinds:
+                self._add_nav_leaf(
+                    group_item, title_for[kind], _page_icon(kind), stack_index[kind]
+                )
+
+        settings_index = len(PAGE_CONFIGS) + 1
+        self._add_nav_leaf(None, "Settings", _page_icon("settings"), settings_index)
+        self._add_nav_leaf(None, "About", _page_icon("about"), settings_index + 1)
         # Sentinel: "Need Help ?" — selecting it switches the sidebar to docs
         # mode and the right pane to the HelpPage.
-        help_item = QListWidgetItem(_page_icon("help"), "Need Help ?")
-        help_item.setData(Qt.ItemDataRole.UserRole, "help-entry")
-        self.nav.addItem(help_item)
-        self.nav.currentRowChanged.connect(self.stack_index_changed)
+        help_item = self._add_nav_leaf(None, "Need Help ?", _page_icon("help"), None)
+        help_item.setData(0, Qt.ItemDataRole.UserRole, "help-entry")
+
+        self.nav.currentItemChanged.connect(self._nav_item_changed)
+        self.nav.itemClicked.connect(self._nav_item_clicked)
+        self.nav.itemExpanded.connect(self._nav_group_toggled)
+        self.nav.itemCollapsed.connect(self._nav_group_toggled)
         return self.nav
+
+    def _add_nav_leaf(
+        self, parent, label: str, page_icon, target_index: int | None
+    ) -> "QTreeWidgetItem":
+        item = QTreeWidgetItem(parent or self.nav, [label])
+        item.setIcon(0, page_icon)
+        item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+        if target_index is not None:
+            item.setData(0, Qt.ItemDataRole.UserRole, target_index)
+            self._nav_index_items[target_index] = item
+        return item
+
+    def _nav_group_toggled(self, item: "QTreeWidgetItem") -> None:
+        # Keep the ▸/▾ prefix in sync with the expanded state.
+        group_title = item.data(0, Qt.ItemDataRole.UserRole + 1)
+        if group_title:
+            item.setText(0, f"{'▾' if item.isExpanded() else '▸'} {group_title}")
+
+    def _nav_item_clicked(self, item: "QTreeWidgetItem", _column: int) -> None:
+        # Clicking a category header (anywhere on the row) toggles it.
+        if item.childCount() > 0:
+            item.setExpanded(not item.isExpanded())
+
+    def _nav_item_changed(self, current, _previous) -> None:
+        if current is None:
+            return
+        data = current.data(0, Qt.ItemDataRole.UserRole)
+        if data == "help-entry":
+            self._enter_docs_mode()
+            return
+        if isinstance(data, int):
+            self._last_main_stack_index = data
+            self.stack.setCurrentIndex(data)
 
     def _build_docs_nav(self, parent: QWidget) -> QWidget:
         container = QWidget(parent)
@@ -516,14 +592,15 @@ class MainWindow(QMainWindow):
 
     def _exit_docs_mode(self) -> None:
         self.nav_stack.setCurrentIndex(0)
-        # Restore last non-help main row, defaulting to Dashboard.
-        target_row = getattr(self, "_last_main_row", 0)
-        if target_row < 0 or target_row >= self.nav.count() - 1:
-            target_row = 0
+        # Restore the last non-help page, defaulting to Dashboard.
+        target_index = getattr(self, "_last_main_stack_index", 0)
+        item = self._nav_index_items.get(target_index, self._dashboard_item)
+        if item.parent() is not None:
+            item.parent().setExpanded(True)
         self.nav.blockSignals(True)
-        self.nav.setCurrentRow(target_row)
+        self.nav.setCurrentItem(item)
         self.nav.blockSignals(False)
-        self.stack.setCurrentIndex(target_row)
+        self.stack.setCurrentIndex(target_index)
 
     def _docs_nav_changed(self, row: int) -> None:
         if 0 <= row < len(self._docs_nav_slugs):
@@ -556,16 +633,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(title, 1)
         return brand
 
-    def stack_index_changed(self, row: int) -> None:
-        if row < 0:
-            return
-        item = self.nav.item(row)
-        if item is not None and item.data(Qt.ItemDataRole.UserRole) == "help-entry":
-            self._enter_docs_mode()
-            return
-        self._last_main_row = row
-        self.stack.setCurrentIndex(row)
-
     def _build_status_bar(self) -> None:
         self.statusBar().showMessage("Ready")
 
@@ -578,7 +645,7 @@ class MainWindow(QMainWindow):
         checker = DependencyChecker()
         statuses = checker.check_many(self.registry.required_binaries())
         lines = [
-            f"{name}: {'OK' if status.available else 'missing'}"
+            f"{dependency_label(name)}: {'OK' if status.available else 'missing'}"
             for name, status in statuses.items()
         ]
 
@@ -604,630 +671,7 @@ class MainWindow(QMainWindow):
             view.set_tasks(tasks)
 
     def _apply_style(self) -> None:
-        self.setStyleSheet(
-            Template(
-                """
-            QMainWindow {
-                background: $BRAND_SURFACE;
-                color: $BRAND_TEXT;
-            }
-            #Sidebar {
-                background: rgba(12, 44, 85, 236);
-                border: 0;
-                border-right: 1px solid rgba(86, 182, 198, 84);
-            }
-            #SidebarTitle {
-                color: $BRAND_ACCENT;
-                font-size: 15px;
-                font-weight: 650;
-                padding: 0;
-            }
-            #SidebarLogo {
-                min-width: 34px;
-                min-height: 34px;
-                max-width: 34px;
-                max-height: 34px;
-            }
-            #SidebarNav {
-                background: transparent;
-                border: 0;
-                color: $BRAND_SURFACE;
-                outline: 0;
-            }
-            #SidebarNav::item {
-                min-height: 38px;
-                padding: 6px 10px 6px 12px;
-                border-radius: 8px;
-                border-left: 3px solid transparent;
-            }
-            #SidebarNav::item:selected {
-                background: rgba(86, 182, 198, 38);
-                color: $BRAND_ACCENT;
-                border-left: 3px solid $BRAND_ACCENT;
-            }
-            #SidebarNav::item:hover {
-                background: rgba(239, 227, 202, 24);
-            }
-            #SidebarNav QScrollBar:vertical,
-            #ConvertScroll QScrollBar:vertical {
-                background: transparent;
-                width: 8px;
-                margin: 4px 2px;
-                border: 0;
-            }
-            #SidebarNav QScrollBar::handle:vertical,
-            #ConvertScroll QScrollBar::handle:vertical {
-                background: rgba(86, 182, 198, 64);
-                border-radius: 3px;
-                min-height: 24px;
-            }
-            #SidebarNav QScrollBar::handle:vertical:hover,
-            #ConvertScroll QScrollBar::handle:vertical:hover {
-                background: rgba(86, 182, 198, 140);
-            }
-            #SidebarNav QScrollBar::add-line:vertical,
-            #SidebarNav QScrollBar::sub-line:vertical,
-            #ConvertScroll QScrollBar::add-line:vertical,
-            #ConvertScroll QScrollBar::sub-line:vertical {
-                background: transparent;
-                height: 0;
-                border: 0;
-            }
-            #SidebarNav QScrollBar::add-page:vertical,
-            #SidebarNav QScrollBar::sub-page:vertical,
-            #ConvertScroll QScrollBar::add-page:vertical,
-            #ConvertScroll QScrollBar::sub-page:vertical {
-                background: transparent;
-            }
-            #ConvertScroll,
-            #ConvertScrollContent {
-                background: transparent;
-                border: 0;
-            }
-            #Sidebar QPushButton {
-                background: rgba(36, 21, 143, 128);
-                color: $BRAND_ACCENT;
-                border: 1px solid rgba(86, 182, 198, 128);
-                border-radius: 8px;
-                padding: 9px 10px;
-            }
-            #DependenciesButton {
-                background: rgba(86, 182, 198, 24);
-                border: 1px solid rgba(86, 182, 198, 120);
-                border-radius: 8px;
-                min-width: 34px;
-                max-width: 34px;
-                min-height: 34px;
-                max-height: 34px;
-                padding: 0;
-            }
-            #PageTitle {
-                color: $BRAND_TEXT;
-                font-size: 24px;
-                font-weight: 700;
-            }
-            #SectionTitle {
-                color: $BRAND_TEXT;
-                font-size: 15px;
-                font-weight: 700;
-            }
-            #SummaryCard,
-            #AboutPanel {
-                background: $BRAND_SURFACE_SOFT;
-                border: 1px solid rgba(86, 182, 198, 150);
-                border-radius: 8px;
-            }
-            #SummaryValue {
-                color: $BRAND_DARK;
-                font-size: 28px;
-                font-weight: 800;
-            }
-            #SummaryLabel,
-            #AboutMeta,
-            #AboutDescription {
-                color: $BRAND_DARK_SOFT;
-                font-size: 12px;
-            }
-            #EngineStatusCard {
-                background: rgba(228, 215, 189, 80);
-                border: 1px solid rgba(86, 182, 198, 100);
-                border-radius: 6px;
-            }
-            #EngineStatusName {
-                color: $BRAND_DARK;
-                font-size: 12px;
-                font-weight: 700;
-            }
-            #EngineStatusModule {
-                color: $BRAND_DARK_SOFT;
-                font-size: 11px;
-            }
-            #EngineStatusOk {
-                color: #1f7a3d;
-                font-size: 11px;
-                font-weight: 700;
-            }
-            #EngineStatusMissing {
-                color: #b1382e;
-                font-size: 11px;
-                font-weight: 700;
-            }
-            #EngineStatusPending {
-                color: $BRAND_DARK_SOFT;
-                font-size: 11px;
-            }
-            #HintLabel {
-                color: $BRAND_DARK_SOFT;
-                font-size: 11px;
-            }
-            #DocsBackButton {
-                background: rgba(36, 21, 143, 128);
-                color: $BRAND_ACCENT;
-                border: 1px solid rgba(86, 182, 198, 128);
-                border-radius: 8px;
-                padding: 6px 10px;
-                font-weight: 650;
-                text-align: left;
-            }
-            #DocsBackButton:hover {
-                background: rgba(86, 182, 198, 90);
-                color: $BRAND_SURFACE;
-            }
-            #PageHelpButton {
-                background: rgba(86, 182, 198, 60);
-                color: $BRAND_DARK;
-                border: 1px solid rgba(86, 182, 198, 145);
-                border-radius: 14px;
-                min-width: 26px;
-                min-height: 26px;
-                font-weight: 800;
-            }
-            #PageHelpButton:hover {
-                background: $BRAND_DARK;
-                color: $BRAND_ACCENT;
-            }
-            #HelpLanguageButton {
-                padding: 6px 14px;
-                border-radius: 8px;
-                border: 1px solid rgba(86, 182, 198, 145);
-                background: rgba(228, 215, 189, 150);
-                color: $BRAND_DARK;
-                font-weight: 650;
-            }
-            #HelpLanguageButton:checked {
-                background: $BRAND_DARK;
-                color: $BRAND_ACCENT;
-                border: 1px solid $BRAND_DARK;
-            }
-            #HelpSearch {
-                padding: 6px 10px;
-                border-radius: 8px;
-            }
-            #HelpBrowser {
-                background: $BRAND_SURFACE_SOFT;
-                border: 1px solid rgba(86, 182, 198, 145);
-                border-radius: 8px;
-                padding: 8px 12px;
-                color: $BRAND_DARK;
-            }
-            #HelpBrowser a {
-                color: $BRAND_DARK;
-                text-decoration: underline;
-            }
-            #HelpSearchPopup {
-                background: $BRAND_SURFACE_SOFT;
-                border: 1px solid rgba(86, 182, 198, 145);
-                border-radius: 8px;
-                padding: 4px;
-            }
-            #HelpSearchPopup::item {
-                padding: 6px 8px;
-                color: $BRAND_DARK;
-            }
-            #HelpSearchPopup::item:selected {
-                background: $BRAND_DARK;
-                color: $BRAND_ACCENT;
-                border-radius: 6px;
-            }
-            #AboutName {
-                color: $BRAND_TEXT;
-                font-size: 22px;
-                font-weight: 800;
-            }
-            #AboutLogo {
-                min-width: 78px;
-                min-height: 78px;
-            }
-            #ToolPanel {
-                background: $BRAND_SURFACE_SOFT;
-                border: 1px solid $BRAND_ACCENT;
-                border-radius: 8px;
-                padding: 0;
-            }
-            QLabel {
-                color: $BRAND_TEXT;
-            }
-            #FieldLabel {
-                color: $BRAND_DARK;
-                font-size: 12px;
-                font-weight: 650;
-                background: transparent;
-                border: 0;
-                padding: 0;
-            }
-            QLineEdit,
-            QComboBox {
-                background: $BRAND_SURFACE;
-                color: $BRAND_TEXT;
-                border: 1px solid $BRAND_ACCENT;
-                border-radius: 8px;
-                padding: 6px 9px;
-                min-height: 26px;
-                selection-background-color: $BRAND_ACCENT;
-                selection-color: $BRAND_DARK;
-            }
-            QSpinBox,
-            QDoubleSpinBox {
-                background: $BRAND_SURFACE;
-                color: $BRAND_TEXT;
-                border: 1px solid $BRAND_ACCENT;
-                border-radius: 8px;
-                padding: 6px 8px;
-                min-height: 26px;
-                selection-background-color: $BRAND_ACCENT;
-                selection-color: $BRAND_DARK;
-            }
-            #PageTabs {
-                background: transparent;
-                border: 0;
-            }
-            #PageTabs::pane {
-                background: transparent;
-                border: 0;
-                top: 0;
-            }
-            #PageTabs QTabBar::tab {
-                background: rgba(228, 215, 189, 150);
-                color: $BRAND_DARK;
-                border: 1px solid rgba(86, 182, 198, 145);
-                border-radius: 8px;
-                padding: 8px 24px;
-                margin-right: 8px;
-                font-size: 13px;
-                font-weight: 700;
-            }
-            #PageTabs QTabBar::tab:selected {
-                background: $BRAND_DARK;
-                color: $BRAND_ACCENT;
-                border: 1px solid $BRAND_DARK;
-            }
-            #PageTabs QTabBar::tab:hover:!selected {
-                background: $BRAND_SURFACE_SOFT;
-            }
-            #ImageOptionsTabs,
-            #PDFOperationsTabs,
-            #VideoOptionsTabs,
-            #AudioOptionsTabs {
-                background: transparent;
-                border: 0;
-            }
-            #OCROptionsPanel,
-            #SubtitleOptionsPanel,
-            #AudioMixOptionsPanel,
-            #ImageMontageOptionsPanel,
-            #SubtitleMergeOptionsPanel,
-            #PDFSplitOptionsPanel,
-            #PDFNumberingOptionsPanel,
-            #SlidesToImagesOptionsPanel,
-            #DocumentOptionsPanel,
-            #QROptionsPanel,
-            #EbookOptionsPanel,
-            #MetadataOptionsPanel {
-                background: $BRAND_SURFACE_SOFT;
-                border: 1px solid rgba(86, 182, 198, 145);
-                border-radius: 8px;
-            }
-            #ImageOptionsTabs::pane,
-            #PDFOperationsTabs::pane,
-            #VideoOptionsTabs::pane,
-            #AudioOptionsTabs::pane,
-            #SVGOptionsTabs::pane,
-            #DashboardTabs::pane {
-                background: $BRAND_SURFACE_SOFT;
-                border: 1px solid rgba(86, 182, 198, 145);
-                border-radius: 8px;
-                top: 10px;
-            }
-            #ImageOptionsTabs QTabBar,
-            #PDFOperationsTabs QTabBar,
-            #VideoOptionsTabs QTabBar,
-            #AudioOptionsTabs QTabBar,
-            #SVGOptionsTabs QTabBar,
-            #DashboardTabs QTabBar {
-                background: transparent;
-                border: 0;
-            }
-            #ImageOptionsTabs QTabBar::tab,
-            #PDFOperationsTabs QTabBar::tab,
-            #VideoOptionsTabs QTabBar::tab,
-            #AudioOptionsTabs QTabBar::tab,
-            #SVGOptionsTabs QTabBar::tab,
-            #DashboardTabs QTabBar::tab {
-                background: rgba(228, 215, 189, 150);
-                color: $BRAND_DARK;
-                border: 1px solid rgba(86, 182, 198, 145);
-                border-radius: 8px;
-                padding: 7px 18px;
-                margin: 0 6px 6px 0;
-                font-weight: 650;
-            }
-            #ImageOptionsTabs QTabBar::tab:selected,
-            #PDFOperationsTabs QTabBar::tab:selected,
-            #VideoOptionsTabs QTabBar::tab:selected,
-            #AudioOptionsTabs QTabBar::tab:selected,
-            #SVGOptionsTabs QTabBar::tab:selected,
-            #DashboardTabs QTabBar::tab:selected {
-                background: $BRAND_DARK;
-                color: $BRAND_ACCENT;
-                border: 1px solid $BRAND_DARK;
-            }
-            #ImageOptionsTabs QTabBar::tab:hover:!selected,
-            #PDFOperationsTabs QTabBar::tab:hover:!selected,
-            #VideoOptionsTabs QTabBar::tab:hover:!selected,
-            #AudioOptionsTabs QTabBar::tab:hover:!selected,
-            #SVGOptionsTabs QTabBar::tab:hover:!selected,
-            #DashboardTabs QTabBar::tab:hover:!selected {
-                background: $BRAND_SURFACE_SOFT;
-            }
-            #ImageOptionsPanel QWidget,
-            #PDFOperationsPanel QWidget,
-            #VideoOptionsPanel QWidget,
-            #AudioOptionsPanel QWidget,
-            #SVGOptionsPanel QWidget,
-            #OCROptionsPanel,
-            #OCROptionsPanel QWidget,
-            #SubtitleOptionsPanel,
-            #SubtitleOptionsPanel QWidget,
-            #AudioMixOptionsPanel,
-            #AudioMixOptionsPanel QWidget,
-            #ImageMontageOptionsPanel,
-            #ImageMontageOptionsPanel QWidget,
-            #SubtitleMergeOptionsPanel,
-            #SubtitleMergeOptionsPanel QWidget,
-            #PDFSplitOptionsPanel,
-            #PDFSplitOptionsPanel QWidget,
-            #PDFNumberingOptionsPanel,
-            #PDFNumberingOptionsPanel QWidget,
-            #SlidesToImagesOptionsPanel,
-            #SlidesToImagesOptionsPanel QWidget,
-            #DocumentOptionsPanel,
-            #DocumentOptionsPanel QWidget,
-            #QROptionsPanel,
-            #QROptionsPanel QWidget,
-            #SVGOptionsPanel,
-            #SVGOptionsPanel QWidget,
-            #EbookOptionsPanel,
-            #EbookOptionsPanel QWidget,
-            #MetadataOptionsPanel,
-            #MetadataOptionsPanel QWidget {
-                background: $BRAND_SURFACE_SOFT;
-            }
-            #ImageOptionsPanel QSlider::groove:horizontal,
-            #PDFOperationsPanel QSlider::groove:horizontal,
-            #VideoOptionsPanel QSlider::groove:horizontal,
-            #AudioOptionsPanel QSlider::groove:horizontal {
-                background: $BRAND_SURFACE_MUTED;
-                border: 1px solid $BRAND_ACCENT;
-                border-radius: 4px;
-                height: 8px;
-            }
-            #ImageOptionsPanel QSlider::handle:horizontal,
-            #PDFOperationsPanel QSlider::handle:horizontal,
-            #VideoOptionsPanel QSlider::handle:horizontal,
-            #AudioOptionsPanel QSlider::handle:horizontal {
-                background: $BRAND_DARK;
-                border: 2px solid $BRAND_ACCENT;
-                border-radius: 8px;
-                width: 16px;
-                margin: -5px 0;
-            }
-            QLineEdit:read-only {
-                background: $BRAND_SURFACE_MUTED;
-            }
-            QLineEdit::placeholder {
-                color: $BRAND_DARK_SOFT;
-            }
-            #OutputFormatCombo {
-                border-right: 0;
-                border-top-right-radius: 0;
-                border-bottom-right-radius: 0;
-            }
-            QComboBox::drop-down {
-                border: 0;
-                width: 0;
-            }
-            QComboBox QAbstractItemView {
-                background: $BRAND_SURFACE;
-                color: $BRAND_TEXT;
-                border: 1px solid $BRAND_ACCENT;
-                selection-background-color: $BRAND_DARK;
-                selection-color: $BRAND_SURFACE;
-                outline: 0;
-                padding: 4px;
-            }
-            QComboBox QAbstractItemView::item {
-                min-height: 26px;
-                padding: 4px 8px;
-            }
-            QComboBox QAbstractItemView::item:selected {
-                background: $BRAND_DARK;
-                color: $BRAND_SURFACE;
-            }
-            #OutputFormatButton {
-                background: $BRAND_DARK;
-                color: $BRAND_ACCENT;
-                border: 1px solid $BRAND_ACCENT;
-                border-top-right-radius: 8px;
-                border-bottom-right-radius: 8px;
-                border-top-left-radius: 0;
-                border-bottom-left-radius: 0;
-                min-width: 34px;
-                min-height: 34px;
-                padding: 0;
-                font-size: 15px;
-                font-weight: 700;
-            }
-            QCheckBox {
-                color: $BRAND_TEXT;
-                spacing: 8px;
-            }
-            QCheckBox::indicator {
-                background: $BRAND_SURFACE;
-                border: 1px solid $BRAND_DARK;
-                border-radius: 3px;
-                width: 14px;
-                height: 14px;
-            }
-            QCheckBox::indicator:hover {
-                border: 1px solid $BRAND_ACCENT;
-            }
-            QCheckBox::indicator:checked {
-                background: $BRAND_DARK;
-                border: 1px solid $BRAND_ACCENT;
-            }
-            QCheckBox::indicator:checked:hover {
-                background: $BRAND_DARK_SOFT;
-            }
-            QPushButton {
-                background: $BRAND_DARK;
-                color: $BRAND_SURFACE;
-                border: 1px solid $BRAND_ACCENT;
-                border-radius: 8px;
-                padding: 5px 10px;
-                min-height: 28px;
-            }
-            QToolButton {
-                background: $BRAND_DARK;
-                color: $BRAND_SURFACE;
-                border: 1px solid $BRAND_ACCENT;
-                border-radius: 8px;
-            }
-            QToolButton:hover {
-                background: $BRAND_DARK_SOFT;
-            }
-            QToolButton:disabled {
-                background: $BRAND_SURFACE_MUTED;
-                color: $BRAND_DARK_SOFT;
-                border-color: $BRAND_SURFACE_MUTED;
-            }
-            QPushButton:hover {
-                background: $BRAND_DARK_SOFT;
-                color: $BRAND_ACCENT;
-            }
-            QPushButton:pressed {
-                background: $BRAND_DARK;
-                color: $BRAND_ACCENT;
-            }
-            QPushButton:disabled {
-                background: $BRAND_SURFACE_MUTED;
-                color: $BRAND_DARK_SOFT;
-                border-color: $BRAND_SURFACE_MUTED;
-            }
-            #QualitySlider::groove:horizontal {
-                background: $BRAND_SURFACE_MUTED;
-                border: 1px solid $BRAND_ACCENT;
-                border-radius: 4px;
-                height: 8px;
-            }
-            #QualitySlider::handle:horizontal {
-                background: $BRAND_DARK;
-                border: 2px solid $BRAND_ACCENT;
-                border-radius: 8px;
-                width: 16px;
-                margin: -5px 0;
-            }
-            #QualityValue {
-                background: $BRAND_SURFACE;
-                color: $BRAND_TEXT;
-                border: 1px solid $BRAND_ACCENT;
-                border-radius: 8px;
-                min-width: 34px;
-                padding: 5px 8px;
-            }
-            QTableWidget {
-                background: $BRAND_SURFACE_SOFT;
-                color: $BRAND_TEXT;
-                border: 1px solid $BRAND_ACCENT;
-                selection-background-color: $BRAND_SURFACE_MUTED;
-                selection-color: $BRAND_TEXT;
-                border-radius: 8px;
-            }
-            QHeaderView::section {
-                background: $BRAND_DARK;
-                color: $BRAND_ACCENT;
-                border: 0;
-                border-right: 1px solid rgba(86, 182, 198, 120);
-                border-bottom: 1px solid rgba(86, 182, 198, 120);
-                padding: 7px;
-            }
-            #QueueFilePreview {
-                background: $BRAND_SURFACE;
-                border: 1px solid $BRAND_SURFACE_MUTED;
-                border-radius: 8px;
-                min-width: 42px;
-                min-height: 42px;
-                max-width: 42px;
-                max-height: 42px;
-            }
-            #QueueFileName {
-                color: $BRAND_TEXT;
-                font-size: 13px;
-                font-weight: 700;
-            }
-            #QueueFilePath {
-                color: $BRAND_DARK_SOFT;
-                font-size: 11px;
-            }
-            QProgressBar {
-                background: $BRAND_SURFACE_MUTED;
-                color: $BRAND_TEXT;
-                border: 1px solid $BRAND_ACCENT;
-                border-radius: 8px;
-                text-align: center;
-            }
-            #QueueProgress {
-                min-width: 82px;
-                max-height: 22px;
-                margin: 14px 6px;
-            }
-            QProgressBar::chunk {
-                background: $BRAND_ACCENT;
-                border-radius: 7px;
-            }
-            #QueueActionButton {
-                border-radius: 8px;
-                min-height: 28px;
-                max-height: 28px;
-                min-width: 32px;
-                max-width: 32px;
-                padding: 2px;
-                margin: 12px 4px;
-            }
-            QStatusBar {
-                background: $BRAND_SURFACE;
-                color: $BRAND_TEXT;
-            }
-            """
-            ).substitute(
-                BRAND_ACCENT=BRAND_ACCENT,
-                BRAND_DARK=BRAND_DARK,
-                BRAND_DARK_SOFT=BRAND_DARK_SOFT,
-                BRAND_SURFACE=BRAND_SURFACE,
-                BRAND_SURFACE_MUTED=BRAND_SURFACE_MUTED,
-                BRAND_SURFACE_SOFT=BRAND_SURFACE_SOFT,
-                BRAND_TEXT=BRAND_TEXT,
-            )
-        )
+        self.setStyleSheet(build_stylesheet())
 
     def closeEvent(self, event) -> None:
         # The asyncio task is cancelled by qasync during application shutdown.

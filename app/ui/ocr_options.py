@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.core.settings import get_settings
+
 try:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import (
@@ -60,18 +62,29 @@ class OCROptionsPanel(QWidget):
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(3, 1)
 
+        settings = get_settings()
         self.language_combo = _combo(self, LANGUAGE_PRESETS)
         self.language_combo.currentIndexChanged.connect(self._toggle_custom_language)
         self.language_custom_input = QLineEdit(self)
         self.language_custom_input.setPlaceholderText("e.g. ind+eng+jpn")
         self.language_custom_input.setEnabled(False)
+        # Seed from the saved default language: pick a matching preset, or fall
+        # back to Custom with the value pre-filled.
+        preset_index = self.language_combo.findData(settings.default_ocr_language)
+        if preset_index >= 0:
+            self.language_combo.setCurrentIndex(preset_index)
+        else:
+            custom_index = self.language_combo.findData("__custom__")
+            if custom_index >= 0:
+                self.language_combo.setCurrentIndex(custom_index)
+            self.language_custom_input.setText(settings.default_ocr_language)
 
         self.psm_combo = _combo(self, PSM_MODES)
         self.oem_combo = _combo(self, OEM_MODES)
 
         self.dpi_input = QSpinBox(self)
         self.dpi_input.setRange(72, 600)
-        self.dpi_input.setValue(300)
+        self.dpi_input.setValue(settings.default_pdf_dpi)
         self.dpi_input.setSuffix(" DPI")
         self.dpi_input.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self.dpi_input.setAccelerated(True)

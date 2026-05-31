@@ -36,6 +36,11 @@ class LibreOfficeEngine(BaseEngine):
             supports_progress=False,
             supports_cancel=True,
             requires_binary="libreoffice",
+            extra_binaries=(
+                "libreoffice:writer",
+                "libreoffice:calc",
+                "libreoffice:impress",
+            ),
         )
         self._processes: dict[str, asyncio.subprocess.Process] = {}
 

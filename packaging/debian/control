@@ -19,7 +19,9 @@ Depends:
  libqt6svg6,
  ffmpeg,
  imagemagick,
- libreoffice,
+ libreoffice-writer,
+ libreoffice-calc,
+ libreoffice-impress,
  qpdf,
  tesseract-ocr
 Recommends:
