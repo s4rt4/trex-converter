@@ -19,6 +19,8 @@ class Settings:
     default_video_crf: int = 0
     default_video_preset: str = "medium"
     default_audio_bitrate: str = "192k"
+    # UI theme: "default" follows the system, "light" / "dark" force it.
+    color_scheme: str = "default"
 
     @classmethod
     def load(cls, path: Path = SETTINGS_PATH) -> "Settings":

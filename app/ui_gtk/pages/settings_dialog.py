@@ -175,6 +175,9 @@ class SettingsDialog(Adw.Dialog):
             default_video_crf=int(self.video_crf.get_value()),
             default_video_preset=str(self.video_preset.get_value()),
             default_audio_bitrate=self.audio_bitrate.get_text().strip() or "192k",
+            # Preserve the theme choice (owned by the header toggle, not this
+            # dialog) so saving general settings doesn't reset it.
+            color_scheme=get_settings().color_scheme,
         )
         try:
             set_settings(new_settings)

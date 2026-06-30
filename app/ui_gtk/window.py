@@ -34,7 +34,15 @@ from app.ui_gtk.pages.placeholder import make_placeholder
 from app.ui_gtk.pages.queue_view import QueueView
 from app.ui_gtk.pages.single_input_pages import SINGLE_INPUT_BUILDERS
 from app.ui_gtk.pages.video_page import build_video_page
+from app.core.settings import get_settings, set_settings
 from app.core.task import Task, TaskStatus
+
+# Persisted theme choice → libadwaita color scheme.
+_SCHEME_FROM_SETTING = {
+    "default": Adw.ColorScheme.DEFAULT,
+    "light": Adw.ColorScheme.FORCE_LIGHT,
+    "dark": Adw.ColorScheme.FORCE_DARK,
+}
 
 # Destinations with a real page. Everything else falls back to a
 # placeholder until it is migrated.
@@ -189,6 +197,12 @@ class TrexWindow(Adw.ApplicationWindow):
 
     def _build_theme_toggle(self) -> Gtk.Button:
         self._style_manager = Adw.StyleManager.get_default()
+        # Apply the theme the user last chose (persisted in settings).
+        self._style_manager.set_color_scheme(
+            _SCHEME_FROM_SETTING.get(
+                get_settings().color_scheme, Adw.ColorScheme.DEFAULT
+            )
+        )
         button = Gtk.Button()
         button.set_tooltip_text("Toggle light / dark theme")
         button.connect("clicked", self._on_theme_toggle)
@@ -205,12 +219,15 @@ class TrexWindow(Adw.ApplicationWindow):
         self._theme_button.set_icon_name(icon_name("sun" if is_dark else "moon"))
 
     def _on_theme_toggle(self, _button) -> None:
+        going_dark = not self._style_manager.get_dark()
         scheme = (
-            Adw.ColorScheme.FORCE_LIGHT
-            if self._style_manager.get_dark()
-            else Adw.ColorScheme.FORCE_DARK
+            Adw.ColorScheme.FORCE_DARK if going_dark else Adw.ColorScheme.FORCE_LIGHT
         )
         self._style_manager.set_color_scheme(scheme)
+        # Remember the choice across restarts.
+        settings = get_settings()
+        settings.color_scheme = "dark" if going_dark else "light"
+        set_settings(settings, persist=True)
 
     def _set_converter_chrome(self, is_converter: bool) -> None:
         """Show the Convert/Queue switcher only for converter destinations.
