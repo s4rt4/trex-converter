@@ -26,7 +26,15 @@
 
 /* Active state, brand green: the selected sidebar destination and the
  * active Convert/Queue tab tint their icon + label #3a944a. `color`
- * recolors both the symbolic (Lucide) icon and the text. */
+ * recolors both the symbolic (Lucide) icon and the text. The selected
+ * row also gets a soft rounded green wash so the selection reads clearly. */
+.navigation-sidebar row:selected {
+  background-color: alpha(#3a944a, 0.14);
+  border-radius: 9px;
+}
+.navigation-sidebar row:selected:hover {
+  background-color: alpha(#3a944a, 0.20);
+}
 .navigation-sidebar row:selected,
 .navigation-sidebar row:selected label,
 .navigation-sidebar row:selected image {
@@ -55,6 +63,17 @@ viewswitcher button:checked image {
 
 .dropzone.empty:hover {
   background-color: alpha(@accent_color, 0.06);
+}
+
+/* A file is being dragged over the zone: brighten the border and fill,
+ * and lift it slightly for a responsive, premium feel. */
+.dropzone.drag-over {
+  border-style: solid;
+  border-color: @accent_color;
+  background-color: alpha(@accent_color, 0.12);
+  box-shadow: 0 0 0 4px alpha(@accent_color, 0.18);
+  transition: background-color 120ms ease, box-shadow 120ms ease,
+              border-color 120ms ease;
 }
 
 /* Thumbnail tile + format badge inside the filled drop zone. */
@@ -116,15 +135,30 @@ viewswitcher button:checked image {
 }
 
 /* ---- Dashboard ------------------------------------------------------- */
-/* Summary stat cards: a big number over a quiet caption. */
+/* Summary stat cards: a tinted glyph over a big number and a quiet caption. */
 .stat-card {
   padding: 16px 18px;
+  transition: box-shadow 150ms ease;
+}
+
+.stat-card:hover {
+  box-shadow: 0 1px 8px alpha(black, 0.12);
 }
 
 .stat-value {
   font-size: 2.1em;
   font-weight: 800;
 }
+
+/* Per-metric accent on the card glyph (and the number where it draws the
+ * eye — completed green, attention amber). */
+.stat-card .stat-icon { opacity: 0.9; }
+.stat-card.metric-total .stat-icon   { color: @accent_color; }
+.stat-card.metric-running .stat-icon { color: @accent_color; }
+.stat-card.metric-success .stat-icon,
+.stat-card.metric-success .stat-value { color: @success_color; }
+.stat-card.metric-failed .stat-icon,
+.stat-card.metric-failed .stat-value  { color: @warning_color; }
 
 /* Activity bar chart card. */
 .activity-chart {
@@ -144,20 +178,57 @@ viewswitcher button:checked image {
   font-weight: bold;
 }
 
-/* ---- Queue task status ---------------------------------------------- */
-.status-success {
+/* ---- Queue rows ----------------------------------------------------- */
+/* Input thumbnail tile. */
+.queue-thumb {
+  border-radius: 8px;
+  min-width: 36px;
+  min-height: 36px;
+  background-image: linear-gradient(135deg, #2a3242, #3c4a5e);
+  color: #cfe3dc;
+}
+
+/* Slimmer, rounded progress bar. */
+.queue-progress {
+  margin-top: 4px;
+}
+.queue-progress trough,
+.queue-progress progress {
+  min-height: 5px;
+  border-radius: 4px;
+}
+.queue-progress progress {
+  background-color: @accent_color;
+}
+
+/* Status pill: tinted, rounded chip with the status colour. */
+.status-pill {
+  border-radius: 20px;
+  padding: 3px 11px;
+  font-weight: bold;
+}
+.status-pill.status-success {
   color: @success_color;
+  background-color: alpha(@success_color, 0.15);
 }
-
-.status-failed {
+.status-pill.status-failed {
   color: @error_color;
+  background-color: alpha(@error_color, 0.15);
 }
-
-.status-running {
+.status-pill.status-running {
   color: @accent_color;
+  background-color: alpha(@accent_color, 0.15);
 }
-
-.status-pending,
-.status-cancelled {
-  opacity: 0.6;
+.status-pill.status-pending {
+  color: @warning_color;
+  background-color: alpha(@warning_color, 0.15);
+}
+.status-pill.status-cancelled {
+  opacity: 0.65;
+  background-color: alpha(@window_fg_color, 0.08);
+}
+/* Keep the running spinner sized to the pill text. */
+.status-pill spinner {
+  min-width: 13px;
+  min-height: 13px;
 }

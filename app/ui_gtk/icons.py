@@ -49,6 +49,11 @@ _FALLBACK: dict[str, str] = {
     "effects": "starred-symbolic",
     "animation": "media-playback-start-symbolic",
     "thumbnails": "view-grid-symbolic",
+    # Dashboard stat-card glyphs.
+    "stat-total": "view-list-symbolic",
+    "stat-running": "media-playback-start-symbolic",
+    "stat-success": "emblem-ok-symbolic",
+    "stat-failed": "dialog-warning-symbolic",
 }
 
 # Lucide is now bundled (assets/icons/hicolor/scalable/actions/

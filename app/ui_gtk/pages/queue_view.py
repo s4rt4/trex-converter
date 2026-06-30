@@ -9,10 +9,21 @@ counts are small and rebuilding keeps the state trivially correct.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from app.core.task import Task, TaskStatus
 from app.ui_gtk.icons import icon_name
 
-from gi.repository import Adw, Gtk
+from gi.repository import Adw, Gdk, GdkPixbuf, GLib, Gtk
+
+_IMAGE_EXTS = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tiff", "tif", "ico"}
+_FAMILY_ICON = {
+    **{ext: "image" for ext in _IMAGE_EXTS},
+    **{ext: "video" for ext in ("mp4", "mkv", "mov", "avi", "webm", "m4v")},
+    **{ext: "audio" for ext in ("mp3", "wav", "m4a", "flac", "aac", "opus", "ogg")},
+    **{ext: "subtitle" for ext in ("srt", "vtt", "ass")},
+    "pdf": "pdf", "svg": "svg",
+}
 
 _STATUS_CSS = {
     TaskStatus.PENDING: "status-pending",
@@ -28,6 +39,17 @@ _STATUS_LABEL = {
     TaskStatus.FAILED: "Failed",
     TaskStatus.CANCELLED: "Cancelled",
 }
+
+
+def _load_thumbnail(path: Path) -> Gdk.Texture | None:
+    """A small thumbnail for raster image inputs; None for everything else."""
+    if path.suffix.lower().lstrip(".") not in _IMAGE_EXTS:
+        return None
+    try:
+        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), 72, 72, True)
+    except GLib.Error:
+        return None
+    return Gdk.Texture.new_for_pixbuf(pixbuf)
 
 
 class QueueView:
@@ -86,6 +108,8 @@ class QueueView:
         box.set_margin_start(12)
         box.set_margin_end(12)
 
+        box.append(self._thumb(task))
+
         info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         info.set_hexpand(True)
         info.set_valign(Gtk.Align.CENTER)
@@ -106,15 +130,38 @@ class QueueView:
         if task.status == TaskStatus.RUNNING:
             bar = Gtk.ProgressBar()
             bar.set_fraction(task.progress)
-            bar.add_css_class("osd")
+            bar.add_css_class("queue-progress")
             info.append(bar)
 
         box.append(info)
-        box.append(self._status_label(task))
+        box.append(self._status_pill(task))
         box.append(self._actions(task))
 
         row.set_child(box)
         return row
+
+    def _thumb(self, task: Task) -> Gtk.Widget:
+        tile = Gtk.Box()
+        tile.add_css_class("queue-thumb")
+        tile.set_overflow(Gtk.Overflow.HIDDEN)
+        tile.set_size_request(36, 36)
+        tile.set_valign(Gtk.Align.CENTER)
+        tile.set_halign(Gtk.Align.CENTER)
+
+        texture = _load_thumbnail(task.input_path)
+        if texture is not None:
+            picture = Gtk.Picture.new_for_paintable(texture)
+            picture.set_content_fit(Gtk.ContentFit.COVER)
+            picture.set_size_request(36, 36)
+            tile.append(picture)
+        else:
+            family = _FAMILY_ICON.get(task.format_in.lower(), "document")
+            image = Gtk.Image.new_from_icon_name(icon_name(family))
+            image.set_pixel_size(18)
+            image.set_hexpand(True)
+            image.set_vexpand(True)
+            tile.append(image)
+        return tile
 
     def _meta_text(self, task: Task) -> str:
         parts = [task.engine, _STATUS_LABEL.get(task.status, str(task.status))]
@@ -124,12 +171,21 @@ class QueueView:
             parts.append(task.error)
         return " · ".join(parts)
 
-    def _status_label(self, task: Task) -> Gtk.Widget:
+    def _status_pill(self, task: Task) -> Gtk.Widget:
+        pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        pill.set_valign(Gtk.Align.CENTER)
+        pill.add_css_class("status-pill")
+        pill.add_css_class(_STATUS_CSS.get(task.status, "status-pending"))
+
+        if task.status == TaskStatus.RUNNING:
+            spinner = Gtk.Spinner()
+            spinner.set_spinning(True)
+            pill.append(spinner)
+
         label = Gtk.Label(label=_STATUS_LABEL.get(task.status, str(task.status)))
-        label.set_valign(Gtk.Align.CENTER)
         label.add_css_class("caption-heading")
-        label.add_css_class(_STATUS_CSS.get(task.status, "status-pending"))
-        return label
+        pill.append(label)
+        return pill
 
     def _actions(self, task: Task) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)

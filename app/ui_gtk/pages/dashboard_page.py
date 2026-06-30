@@ -16,7 +16,9 @@ import math
 import subprocess
 from shutil import which
 
-from gi.repository import Adw, Gdk, Gtk, Pango, PangoCairo
+from gi.repository import Adw, Gdk, GLib, Gtk, Pango, PangoCairo
+
+from app.ui_gtk.icons import icon_name
 
 # (binary, what it powers) — mirrors the old dashboard's ENGINE_BINARIES.
 ENGINE_BINARIES: tuple[tuple[str, str], ...] = (
@@ -33,11 +35,13 @@ ENGINE_BINARIES: tuple[tuple[str, str], ...] = (
     ("zbarimg", "QR / Barcode decode"),
 )
 
-SUMMARY_CARDS: tuple[tuple[str, str], ...] = (
-    ("total", "Total tasks"),
-    ("running", "Running"),
-    ("success", "Completed"),
-    ("failed", "Needs attention"),
+# (key, caption, metric css class) — each card gets a Lucide glyph
+# (icon_name("stat-<key>")) tinted by its metric colour.
+SUMMARY_CARDS: tuple[tuple[str, str, str], ...] = (
+    ("total", "Total tasks", "metric-total"),
+    ("running", "Running", "metric-running"),
+    ("success", "Completed", "metric-success"),
+    ("failed", "Needs attention", "metric-failed"),
 )
 
 # (label, count_by_period granularity) — mirrors the old dashboard.
@@ -56,6 +60,7 @@ class DashboardPage:
     def __init__(self, window) -> None:
         self._window = window
         self._values: dict[str, Gtk.Label] = {}
+        self._anim: dict[str, int] = {}  # key -> GLib timeout source id
         self._status: dict[str, Gtk.Label] = {}
 
         self._chart_buckets: list[tuple[str, int]] = []
@@ -84,15 +89,22 @@ class DashboardPage:
         flow.set_row_spacing(12)
         flow.set_min_children_per_line(2)
         flow.set_max_children_per_line(4)
-        for key, label in SUMMARY_CARDS:
-            flow.append(self._make_card(key, label))
+        for key, label, metric in SUMMARY_CARDS:
+            flow.append(self._make_card(key, label, metric))
         group.add(flow)
         return group
 
-    def _make_card(self, key: str, label: str) -> Gtk.Widget:
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+    def _make_card(self, key: str, label: str, metric: str) -> Gtk.Widget:
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         card.add_css_class("card")
         card.add_css_class("stat-card")
+        card.add_css_class(metric)
+
+        icon = Gtk.Image.new_from_icon_name(icon_name(f"stat-{key}"))
+        icon.set_pixel_size(22)
+        icon.set_halign(Gtk.Align.START)
+        icon.add_css_class("stat-icon")
+        card.append(icon)
 
         value = Gtk.Label(label="0", xalign=0.0)
         value.add_css_class("stat-value")
@@ -281,9 +293,39 @@ class DashboardPage:
             ("success", success), ("failed", failed),
         ):
             if key in self._values:
-                self._values[key].set_label(str(count))
+                self._animate_count(key, count)
         # Task counts changed, so the history did too — keep the chart live.
         self._refresh_chart()
+
+    def _animate_count(self, key: str, target: int) -> None:
+        """Tick a card's number up/down to ``target`` for a lively feel."""
+        label = self._values[key]
+        try:
+            current = int(label.get_label())
+        except ValueError:
+            current = 0
+        if key in self._anim:
+            GLib.source_remove(self._anim[key])
+            del self._anim[key]
+        if current == target:
+            label.set_label(str(target))
+            return
+
+        steps = min(12, abs(target - current))
+        delta = (target - current) / steps
+        state = {"value": float(current), "left": steps}
+
+        def step() -> bool:
+            state["left"] -= 1
+            if state["left"] <= 0:
+                label.set_label(str(target))
+                self._anim.pop(key, None)
+                return False
+            state["value"] += delta
+            label.set_label(str(round(state["value"])))
+            return True
+
+        self._anim[key] = GLib.timeout_add(28, step)
 
 
 def _short_label(bucket: str, granularity: str) -> str:

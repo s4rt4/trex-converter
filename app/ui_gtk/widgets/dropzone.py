@@ -64,6 +64,8 @@ class DropZone(Gtk.Box):
 
         drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
         drop.connect("drop", self._on_drop)
+        drop.connect("enter", self._on_drag_enter)
+        drop.connect("leave", self._on_drag_leave)
         self.add_controller(drop)
 
         self._click = Gtk.GestureClick()
@@ -299,7 +301,15 @@ class DropZone(Gtk.Box):
     def _on_remove(self, _button) -> None:
         self._set_path(None)
 
+    def _on_drag_enter(self, _target, _x, _y) -> Gdk.DragAction:
+        self.add_css_class("drag-over")
+        return Gdk.DragAction.COPY
+
+    def _on_drag_leave(self, _target) -> None:
+        self.remove_css_class("drag-over")
+
     def _on_drop(self, _target, value, _x, _y) -> bool:
+        self.remove_css_class("drag-over")
         files = value.get_files() if hasattr(value, "get_files") else []
         if not files:
             return False

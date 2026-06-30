@@ -73,6 +73,8 @@ class TrexWindow(Adw.ApplicationWindow):
         self._dashboard = None
 
         self._split = Adw.NavigationSplitView()
+        self._split.set_min_sidebar_width(200)
+        self._split.set_max_sidebar_width(320)
         self._split.set_sidebar(self._build_sidebar())
         self._split.set_content(self._build_content())
         self.set_content(self._split)
@@ -85,6 +87,12 @@ class TrexWindow(Adw.ApplicationWindow):
     # -- sidebar -----------------------------------------------------------
 
     def _build_sidebar(self) -> Adw.NavigationPage:
+        # Refs used to fold the sidebar into an icon-only rail.
+        self._nav_item_labels: list[Gtk.Label] = []
+        self._nav_item_boxes: list[Gtk.Box] = []
+        self._nav_header_rows: list[Gtk.ListBoxRow] = []
+        self._sidebar_collapsed = False
+
         self._listbox = Gtk.ListBox()
         self._listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self._listbox.add_css_class("navigation-sidebar")
@@ -101,11 +109,19 @@ class TrexWindow(Adw.ApplicationWindow):
         scrolled.set_child(self._listbox)
         scrolled.set_vexpand(True)
 
+        header = Adw.HeaderBar()
+        self._collapse_button = Gtk.Button(icon_name=icon_name("menu"))
+        self._collapse_button.add_css_class("flat")
+        self._collapse_button.set_tooltip_text("Collapse sidebar")
+        self._collapse_button.connect("clicked", self._toggle_sidebar)
+        header.pack_start(self._collapse_button)
+
         toolbar = Adw.ToolbarView()
-        toolbar.add_top_bar(Adw.HeaderBar())
+        toolbar.add_top_bar(header)
         toolbar.set_content(scrolled)
 
-        return Adw.NavigationPage(title="T-Rex Converter", child=toolbar)
+        self._sidebar_page = Adw.NavigationPage(title="T-Rex Converter", child=toolbar)
+        return self._sidebar_page
 
     def _make_header_row(self, title: str) -> Gtk.ListBoxRow:
         label = Gtk.Label(label=title, xalign=0.0)
@@ -117,6 +133,7 @@ class TrexWindow(Adw.ApplicationWindow):
         row.set_selectable(False)
         row.set_activatable(False)
         row.set_child(label)
+        self._nav_header_rows.append(row)
         return row
 
     def _make_item_row(self, item: NavItem) -> Gtk.ListBoxRow:
@@ -126,23 +143,56 @@ class TrexWindow(Adw.ApplicationWindow):
         box.set_margin_start(6)
         box.set_margin_end(6)
         box.append(Gtk.Image.new_from_icon_name(icon_name(item.icon)))
-        box.append(Gtk.Label(label=item.title, xalign=0.0))
+        label = Gtk.Label(label=item.title, xalign=0.0)
+        box.append(label)
+        self._nav_item_labels.append(label)
+        self._nav_item_boxes.append(box)
 
         row = Gtk.ListBoxRow()
         row.set_child(box)
+        row.set_tooltip_text(item.title)  # shown when collapsed to icons
         row._nav_id = item.id  # type: ignore[attr-defined]
         self._rows_by_id[item.id] = row
         return row
+
+    # -- collapse to an icon-only rail ------------------------------------
+
+    def _toggle_sidebar(self, _button) -> None:
+        self._set_sidebar_collapsed(not self._sidebar_collapsed)
+
+    def _set_sidebar_collapsed(self, collapsed: bool) -> None:
+        self._sidebar_collapsed = collapsed
+        for label in self._nav_item_labels:
+            label.set_visible(not collapsed)
+        for row in self._nav_header_rows:
+            row.set_visible(not collapsed)
+        for box in self._nav_item_boxes:
+            box.set_halign(Gtk.Align.CENTER if collapsed else Gtk.Align.FILL)
+
+        if collapsed:
+            self._split.set_min_sidebar_width(56)
+            self._split.set_max_sidebar_width(56)
+        else:
+            self._split.set_min_sidebar_width(200)
+            self._split.set_max_sidebar_width(320)
+
+        self._sidebar_page.set_title("" if collapsed else "T-Rex Converter")
+        self._collapse_button.set_tooltip_text(
+            "Expand sidebar" if collapsed else "Collapse sidebar"
+        )
 
     # -- content -----------------------------------------------------------
 
     def _build_content(self) -> Adw.NavigationPage:
         self._stack = Adw.ViewStack()
 
-        # Convert: a swappable holder for the selected destination's page.
-        self._convert_bin = Adw.Bin()
+        # Convert: a crossfading holder for the selected destination's page,
+        # so switching destinations fades rather than snaps.
+        self._convert_stack = Gtk.Stack()
+        self._convert_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self._convert_stack.set_transition_duration(200)
         self._stack.add_titled_with_icon(
-            self._convert_bin, "convert", "Convert", icon_name("convert")
+            self._convert_stack, "convert", "Convert", icon_name("convert")
         )
 
         # Queue: shared across all destinations.
@@ -271,7 +321,8 @@ class TrexWindow(Adw.ApplicationWindow):
             builder = _PAGE_BUILDERS.get(item_id)
             page = builder(self) if builder is not None else make_placeholder(item)
             self._convert_pages[item_id] = page
-        self._convert_bin.set_child(page)
+            self._convert_stack.add_named(page, item_id)
+        self._convert_stack.set_visible_child_name(item_id)
         self._content_page.set_title(item.title)
         self._set_converter_chrome(item_id != DASHBOARD.id)
         self._stack.set_visible_child_name("convert")
