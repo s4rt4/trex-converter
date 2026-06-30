@@ -30,8 +30,10 @@ from app.ui_gtk.pages.image_page import build_image_page
 from app.ui_gtk.pages.multi_input_pages import MULTI_INPUT_BUILDERS
 from app.ui_gtk.pages.pdf_page import build_pdf_page
 from app.ui_gtk.pages.placeholder import make_placeholder
+from app.ui_gtk.pages.queue_view import QueueView
 from app.ui_gtk.pages.single_input_pages import SINGLE_INPUT_BUILDERS
 from app.ui_gtk.pages.video_page import build_video_page
+from app.core.task import Task, TaskStatus
 
 # Destinations with a real page. Everything else falls back to a
 # placeholder until it is migrated.
@@ -56,6 +58,10 @@ class TrexWindow(Adw.ApplicationWindow):
         # Lazily built per-destination convert pages, keyed by NavItem.id.
         self._convert_pages: dict[str, Gtk.Widget] = {}
         self._rows_by_id: dict[str, Gtk.ListBoxRow] = {}
+
+        # Wired up by attach_queue() once the backend controller exists.
+        self.queue = None
+        self._dashboard = None
 
         self._split = Adw.NavigationSplitView()
         self._split.set_sidebar(self._build_sidebar())
@@ -130,14 +136,10 @@ class TrexWindow(Adw.ApplicationWindow):
             self._convert_bin, "convert", "Convert", icon_name("convert")
         )
 
-        # Queue: shared across all destinations (placeholder for now).
-        queue_view = Adw.StatusPage(
-            title="Queue",
-            description="Conversion tasks will appear here.",
-            icon_name=icon_name("queue"),
-        )
+        # Queue: shared across all destinations.
+        self._queue_view = QueueView(self)
         self._stack.add_titled_with_icon(
-            queue_view, "queue", "Queue", icon_name("queue")
+            self._queue_view.widget, "queue", "Queue", icon_name("queue")
         )
 
         self._toasts = Adw.ToastOverlay()
@@ -255,6 +257,57 @@ class TrexWindow(Adw.ApplicationWindow):
 
     def show_toast(self, text: str) -> None:
         self._toasts.add_toast(Adw.Toast.new(text))
+
+    # -- queue / backend ---------------------------------------------------
+
+    def attach_queue(self, controller) -> None:
+        """Connect the backend queue controller and show any existing tasks."""
+        self.queue = controller
+        self.on_tasks_changed(controller.snapshot())
+
+    def register_dashboard(self, dashboard) -> None:
+        """Let the dashboard receive live task counts."""
+        self._dashboard = dashboard
+        if self.queue is not None:
+            self.on_tasks_changed(self.queue.snapshot())
+
+    def on_tasks_changed(self, tasks: list[Task]) -> None:
+        """Called on the GTK main thread when the task set changes."""
+        self._queue_view.set_tasks(tasks)
+        if self._dashboard is not None:
+            self._dashboard.set_counts(
+                total=len(tasks),
+                running=sum(1 for t in tasks if t.status == TaskStatus.RUNNING),
+                success=sum(1 for t in tasks if t.status == TaskStatus.SUCCESS),
+                failed=sum(1 for t in tasks if t.status == TaskStatus.FAILED),
+            )
+
+    def enqueue(
+        self,
+        kind: str,
+        primary,
+        *,
+        extra_inputs=(),
+        output_dir=None,
+        format_out=None,
+        options=None,
+        switch_to_queue: bool = False,
+    ) -> bool:
+        """Build a task from a page's selections and submit it to the queue."""
+        if self.queue is None:
+            self.show_toast("The conversion engine is not available.")
+            return False
+        from app.ui_gtk.backend import build_task
+
+        task = build_task(
+            kind, primary, extra_inputs=extra_inputs,
+            output_dir=output_dir, format_out=format_out, options=options,
+        )
+        self.queue.submit(task)
+        self.show_toast("Added to the queue.")
+        if switch_to_queue:
+            self._stack.set_visible_child_name("queue")
+        return True
 
 
 _MENU_XML = """

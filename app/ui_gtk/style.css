@@ -113,3 +113,21 @@
   color: @error_color;
   font-weight: bold;
 }
+
+/* ---- Queue task status ---------------------------------------------- */
+.status-success {
+  color: @success_color;
+}
+
+.status-failed {
+  color: @error_color;
+}
+
+.status-running {
+  color: @accent_color;
+}
+
+.status-pending,
+.status-cancelled {
+  opacity: 0.6;
+}

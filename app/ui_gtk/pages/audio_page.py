@@ -304,12 +304,21 @@ class AudioPage:
         return True
 
     def _on_convert(self) -> None:
-        if self._require_file():
-            self._window.show_toast("The conversion engine is not connected yet.")
+        self._enqueue(switch=True)
 
     def _on_add_to_queue(self) -> None:
-        if self._require_file():
-            self._window.show_toast("The queue is not connected yet.")
+        self._enqueue(switch=False)
+
+    def _enqueue(self, *, switch: bool) -> None:
+        if not self._require_file():
+            return
+        options = self.collect_options()
+        fmt = options.pop("format_out", None)
+        self._window.enqueue(
+            KIND, self.dropzone.path,
+            output_dir=self.destination.directory,
+            format_out=fmt, options=options, switch_to_queue=switch,
+        )
 
 
 def _as_float(value, fallback: float) -> float:

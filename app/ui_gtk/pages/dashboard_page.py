@@ -52,6 +52,8 @@ class DashboardPage:
 
         self.widget = page
         self.refresh_engines()
+        if hasattr(window, "register_dashboard"):
+            window.register_dashboard(self)
 
     # -- summary cards -----------------------------------------------------
 

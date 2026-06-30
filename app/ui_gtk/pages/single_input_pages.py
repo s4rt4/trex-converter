@@ -184,12 +184,22 @@ class SingleInputPage:
         return True
 
     def _on_convert(self) -> None:
-        if self._require_input():
-            self._window.show_toast("The conversion engine is not connected yet.")
+        self._enqueue(switch=True)
 
     def _on_add_to_queue(self) -> None:
-        if self._require_input():
-            self._window.show_toast("The queue is not connected yet.")
+        self._enqueue(switch=False)
+
+    def _enqueue(self, *, switch: bool) -> None:
+        if not self._require_input():
+            return
+        primary = self._folder if self.INPUT_MODE == "folder" else self.dropzone.path
+        options = self.collect_options()
+        fmt = options.pop("format_out", None)
+        self._window.enqueue(
+            self.KIND, primary,
+            output_dir=self.destination.directory,
+            format_out=fmt, options=options, switch_to_queue=switch,
+        )
 
     def _root_window(self) -> Gtk.Window | None:
         return self._window if isinstance(self._window, Gtk.Window) else None

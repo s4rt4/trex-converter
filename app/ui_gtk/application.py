@@ -43,7 +43,20 @@ class TrexApplication(Adw.Application):
     def do_activate(self) -> None:
         if self._window is None:
             self._window = TrexWindow(application=self)
+            self._attach_queue()
         self._window.present()
+
+    def _attach_queue(self) -> None:
+        from app.ui_gtk.backend import QueueController
+
+        self._queue = QueueController(on_change=self._window.on_tasks_changed)
+        self._window.attach_queue(self._queue)
+
+    def do_shutdown(self) -> None:
+        queue = getattr(self, "_queue", None)
+        if queue is not None:
+            queue.shutdown()
+        Adw.Application.do_shutdown(self)
 
     def _install_actions(self) -> None:
         for name, handler in (

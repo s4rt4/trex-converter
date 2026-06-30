@@ -145,12 +145,22 @@ class MultiInputPage:
         return True
 
     def _on_convert(self) -> None:
-        if self._has_enough_files():
-            self._window.show_toast("The conversion engine is not connected yet.")
+        self._enqueue(switch=True)
 
     def _on_add_to_queue(self) -> None:
-        if self._has_enough_files():
-            self._window.show_toast("The queue is not connected yet.")
+        self._enqueue(switch=False)
+
+    def _enqueue(self, *, switch: bool) -> None:
+        if not self._has_enough_files():
+            return
+        options = self.collect_options()
+        fmt = options.pop("format_out", None)
+        self._window.enqueue(
+            self.KIND, self.files.primary,
+            extra_inputs=self.files.extra_inputs,
+            output_dir=self.destination.directory,
+            format_out=fmt, options=options, switch_to_queue=switch,
+        )
 
 
 # --- concrete pages ------------------------------------------------------
