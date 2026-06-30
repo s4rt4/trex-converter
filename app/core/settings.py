@@ -1,12 +1,40 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
+from app.utils.paths import config_dir
 
-CONFIG_DIR = Path.home() / ".config" / "trex-converter"
+# Single canonical config directory (~/.config/t-rex-converter), shared with
+# the task database. Settings and presets used to live in a second dir
+# (~/.config/trex-converter, no hyphen); migrate_legacy_config() folds that
+# legacy location in on startup.
+CONFIG_DIR = config_dir()
 SETTINGS_PATH = CONFIG_DIR / "settings.json"
+
+_LEGACY_CONFIG_DIR = Path.home() / ".config" / "trex-converter"
+
+
+def migrate_legacy_config() -> None:
+    """One-time move of settings + presets from the old config dir.
+
+    Safe no-op when there's nothing to move (the common case). Never
+    overwrites data already present at the canonical location.
+    """
+    if not _LEGACY_CONFIG_DIR.exists() or _LEGACY_CONFIG_DIR == CONFIG_DIR:
+        return
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    legacy_settings = _LEGACY_CONFIG_DIR / "settings.json"
+    if legacy_settings.is_file() and not SETTINGS_PATH.exists():
+        shutil.move(str(legacy_settings), str(SETTINGS_PATH))
+
+    legacy_presets = _LEGACY_CONFIG_DIR / "presets"
+    new_presets = CONFIG_DIR / "presets"
+    if legacy_presets.is_dir() and not new_presets.exists():
+        shutil.move(str(legacy_presets), str(new_presets))
 
 
 @dataclass(slots=True)

@@ -24,6 +24,9 @@ class TrexApplication(Adw.Application):
 
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
+        from app.core.settings import migrate_legacy_config
+
+        migrate_legacy_config()
         self._register_icons()
         load_css()
         self._install_actions()
