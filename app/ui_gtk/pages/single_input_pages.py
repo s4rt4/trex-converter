@@ -317,7 +317,7 @@ class SubtitleExtractPage(SingleInputPage):
 
 class OcrPage(SingleInputPage):
     KIND = "ocr"
-    FILE_ICON = "utility"
+    FILE_ICON = "ocr"
     EMPTY_TITLE = "Drop an image or PDF here or click to choose"
     EMPTY_SUBTITLE = "PNG, JPG, TIFF, BMP, PDF"
     OUTPUT_FORMATS = ("txt", "pdf", "hocr", "tsv")
@@ -465,7 +465,7 @@ class EbookPage(SingleInputPage):
 
 class QrPage(SingleInputPage):
     KIND = "qr"
-    FILE_ICON = "utility"
+    FILE_ICON = "qr"
     EMPTY_TITLE = "Drop a .txt or image here or click to choose"
     EMPTY_SUBTITLE = "TXT → QR · image → decoded text"
     OUTPUT_FORMATS = ("png", "svg", "txt")
@@ -794,7 +794,7 @@ class ArchiveCompressPage(SingleInputPage):
 
 class MetadataPage(SingleInputPage):
     KIND = "metadata"
-    FILE_ICON = "utility"
+    FILE_ICON = "metadata"
     EMPTY_TITLE = "Drop a file here or click to choose"
     EMPTY_SUBTITLE = "Image · audio · video · PDF"
 
