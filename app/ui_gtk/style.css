@@ -1,0 +1,115 @@
+/* T-Rex Converter — GTK4 application styles.
+ *
+ * Keep this minimal. Lean on libadwaita named colors and built-in style
+ * classes; only add what the platform does not already give us. Never
+ * hardcode a dark theme — light/dark and accent follow the system.
+ */
+
+/* Brand teal, used only for small branding accents (never for controls,
+ * which must follow the system accent). */
+.brand-accent {
+  color: #1d9e75;
+}
+
+/* Sidebar group headers: small, quiet caption. */
+.nav-group-heading {
+  margin: 12px 12px 2px 12px;
+}
+
+/* ---- Drop zone -------------------------------------------------------- */
+/* A dashed card. Empty state is click-to-choose; filled state shows a
+ * preview with its own Replace/Remove buttons. */
+.dropzone {
+  background-color: @card_bg_color;
+  border: 1.5px dashed alpha(@accent_color, 0.45);
+  border-radius: 13px;
+  padding: 15px;
+}
+
+.dropzone.empty {
+  padding: 28px;
+}
+
+.dropzone.empty:hover {
+  background-color: alpha(@accent_color, 0.06);
+}
+
+/* Thumbnail tile + format badge inside the filled drop zone. */
+.dz-thumb {
+  border-radius: 10px;
+  min-width: 78px;
+  min-height: 78px;
+  background-image: linear-gradient(135deg, #2a3242, #3c4a5e);
+  color: #cfe3dc;
+}
+
+.dz-badge {
+  background-color: alpha(black, 0.55);
+  color: white;
+  font-size: 0.72em;
+  font-weight: bold;
+  border-radius: 5px;
+  padding: 1px 6px;
+  margin: 5px;
+}
+
+.dz-estimate {
+  color: @accent_color;
+  font-weight: bold;
+}
+
+/* ---- Format chips ---------------------------------------------------- */
+/* A selected chip fills with the system accent, like the mockup. */
+.format-chips button:checked {
+  background-color: @accent_bg_color;
+  color: @accent_fg_color;
+  font-weight: bold;
+}
+
+/* "More…" button shows the chosen overflow format with an accent tint. */
+.format-chips .overflow-selected {
+  background-color: @accent_bg_color;
+  color: @accent_fg_color;
+  font-weight: bold;
+}
+
+/* ---- Value badges / counters ---------------------------------------- */
+/* Quality value pill next to the slider. */
+.value-badge {
+  background-color: alpha(@accent_color, 0.15);
+  color: @accent_color;
+  border-radius: 7px;
+  padding: 2px 10px;
+  font-weight: bold;
+}
+
+/* "N active" counter in an operations group header. */
+.operations-count {
+  background-color: alpha(@accent_color, 0.15);
+  color: @accent_color;
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-weight: bold;
+}
+
+/* ---- Dashboard ------------------------------------------------------- */
+/* Summary stat cards: a big number over a quiet caption. */
+.stat-card {
+  padding: 16px 18px;
+}
+
+.stat-value {
+  font-size: 2.1em;
+  font-weight: 800;
+}
+
+/* Engine availability status pills. */
+.engine-ok {
+  color: @success_color;
+  font-weight: bold;
+}
+
+.engine-missing {
+  color: @error_color;
+  font-weight: bold;
+}
