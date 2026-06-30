@@ -1,11 +1,17 @@
 """Entry point for the GTK4 / libadwaita interface.
 
-Run with the *system* Python (which provides PyGObject / ``gi``):
+Run from the project venv:
 
-    python3 -m app.gtk_main
+    .venv/bin/python -m app.gtk_main
 
-The project ``.venv`` is PySide6-only and has no ``gi``; see the project
-notes for the venv options if you need both in one interpreter.
+The venv is configured with ``include-system-site-packages = true`` so it
+sees the system PyGObject (``gi``) while keeping the venv's own engine
+dependencies (PyMuPDF, …). The bare system ``python3`` also works but has
+no PyMuPDF, so PDF conversions would fail there.
+
+Some engines still need their CLI binaries on PATH (pandoc, qpdf,
+qrencode, zbarimg); install those separately to enable ebook / QR / the
+qpdf-backed PDF operations.
 """
 
 from __future__ import annotations
