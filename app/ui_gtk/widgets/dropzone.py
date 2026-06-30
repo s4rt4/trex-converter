@@ -13,12 +13,14 @@ never a blank placeholder (house style §7.1).
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
 
 from app.ui_gtk.icons import icon_name
+from app.ui_gtk.probe import probe_details
 
 
 def human_size(num: int) -> str:
@@ -44,6 +46,7 @@ class DropZone(Gtk.Box):
         icon: str = "image",
         empty_title: str = "Drop a file here or click to choose",
         empty_subtitle: str = "",
+        probe: bool = True,
     ) -> None:
         super().__init__()
         self.add_css_class("dropzone")
@@ -52,8 +55,12 @@ class DropZone(Gtk.Box):
         self._icon = icon
         self._empty_title = empty_title
         self._empty_subtitle = empty_subtitle
+        self._probe = probe
         self._path: Path | None = None
         self._details: str | None = None
+        # Bumped on every path change so a slow probe for a replaced file
+        # can't overwrite the metadata of the file now shown.
+        self._probe_generation = 0
 
         drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
         drop.connect("drop", self._on_drop)
@@ -254,11 +261,31 @@ class DropZone(Gtk.Box):
     def _set_path(self, path: Path | None) -> None:
         self._path = path
         self._details = None
+        self._probe_generation += 1
         if path is None:
             self._render_empty()
         else:
             self._render_filled(path)
+            if self._probe:
+                self._start_probe(path, self._probe_generation)
         self._on_change(path)
+
+    # -- background probe --------------------------------------------------
+
+    def _start_probe(self, path: Path, generation: int) -> None:
+        """Probe the file's dimensions / duration off the UI thread."""
+        def worker() -> None:
+            details = probe_details(path)
+            if details is not None:
+                GLib.idle_add(self._apply_probe, generation, details)
+
+        threading.Thread(target=worker, name="dropzone-probe", daemon=True).start()
+
+    def _apply_probe(self, generation: int, details: str) -> bool:
+        # Discard results for a file that's already been replaced/removed.
+        if generation == self._probe_generation and self._path is not None:
+            self.set_details(details)
+        return False  # one-shot idle callback
 
     def _on_click(self, _gesture, _n_press, _x, _y) -> None:
         # Only the empty card is click-to-choose; the filled card uses its

@@ -18,6 +18,7 @@ from __future__ import annotations
 from gi.repository import Adw, Gtk
 
 from app.ui_gtk.icons import icon_name
+from app.ui_gtk.resources import ResourceMonitor
 from app.ui_gtk.navigation import (
     DASHBOARD,
     NAV_GROUPS,
@@ -159,6 +160,10 @@ class TrexWindow(Adw.ApplicationWindow):
         self._header.pack_end(help_button)
         self._header.pack_end(self._build_theme_toggle())
 
+        # Always-visible CPU / RAM readout for the app + its conversions.
+        self._resource_monitor = ResourceMonitor()
+        self._header.pack_start(self._resource_monitor.widget)
+
         # Narrow layout: move the switcher to a bottom bar.
         self._switcher_bar = Adw.ViewSwitcherBar(stack=self._stack)
 
@@ -178,7 +183,9 @@ class TrexWindow(Adw.ApplicationWindow):
         return button
 
     def _on_help_clicked(self, _button) -> None:
-        self.show_toast("Documentation is not available yet.")
+        from app.ui_gtk.pages.help_page import present_help
+
+        present_help(self)
 
     def _build_theme_toggle(self) -> Gtk.Button:
         self._style_manager = Adw.StyleManager.get_default()

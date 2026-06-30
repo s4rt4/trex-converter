@@ -21,6 +21,7 @@ from pathlib import Path
 from gi.repository import Adw, Gtk
 
 from app.core.settings import get_settings
+from app.ui_gtk.formats import picker_args
 from app.ui_gtk.widgets.destination_row import DestinationRow
 from app.ui_gtk.widgets.dropzone import DropZone
 from app.ui_gtk.widgets.format_picker import FormatPicker
@@ -79,8 +80,9 @@ class ImagePage:
 
         # --- Output -------------------------------------------------------
         self.format_picker = FormatPicker(
-            OUTPUT_FORMATS, common=COMMON_FORMATS,
-            default=DEFAULT_FORMAT, title="Format",
+            **picker_args(KIND, OUTPUT_FORMATS, common=COMMON_FORMATS,
+                          default=DEFAULT_FORMAT),
+            title="Format",
         )
         self.destination = DestinationRow(initial=_default_output_dir())
         self.quality = QualityRow(

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=T-Rex Converter
+Comment=Convert media, images, documents, and PDFs locally
+Exec=t-rex-converter
+Icon=io.github.s4rt4.trexconverter
+Terminal=false
+Categories=Utility;AudioVideo;Graphics;
+StartupWMClass=io.github.s4rt4.trexconverter

@@ -21,6 +21,7 @@ from pathlib import Path
 from gi.repository import Adw, Gtk
 
 from app.core.settings import get_settings
+from app.ui_gtk.formats import picker_args
 from app.ui_gtk.widgets.destination_row import DestinationRow
 from app.ui_gtk.widgets.file_list_input import FileListInput
 from app.ui_gtk.widgets.format_picker import FormatPicker
@@ -62,9 +63,10 @@ class MultiInputPage:
         output_group = Adw.PreferencesGroup(title="Output")
         if self.OUTPUT_FORMATS:
             self.format_picker = FormatPicker(
-                self.OUTPUT_FORMATS,
-                common=self.COMMON_FORMATS,
-                default=self.DEFAULT_FORMAT,
+                **picker_args(
+                    self.KIND, self.OUTPUT_FORMATS,
+                    common=self.COMMON_FORMATS, default=self.DEFAULT_FORMAT,
+                ),
                 title="Format",
             )
             output_group.add(self.format_picker.row)

@@ -20,6 +20,7 @@ from pathlib import Path
 from gi.repository import Adw, Gio, GLib, Gtk
 
 from app.core.settings import get_settings
+from app.ui_gtk.formats import picker_args
 from app.ui_gtk.widgets.destination_row import DestinationRow
 from app.ui_gtk.widgets.dropzone import DropZone
 from app.ui_gtk.widgets.format_picker import FormatPicker
@@ -119,8 +120,11 @@ class SingleInputPage:
         group = Adw.PreferencesGroup(title="Output")
         if self.OUTPUT_FORMATS:
             self.format_picker = FormatPicker(
-                self.OUTPUT_FORMATS, common=self.COMMON_FORMATS,
-                default=self.DEFAULT_FORMAT, title="Format",
+                **picker_args(
+                    self.KIND, self.OUTPUT_FORMATS,
+                    common=self.COMMON_FORMATS, default=self.DEFAULT_FORMAT,
+                ),
+                title="Format",
             )
             group.add(self.format_picker.row)
         elif self.FIXED_FORMAT:

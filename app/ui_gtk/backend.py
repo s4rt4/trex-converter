@@ -95,6 +95,15 @@ def build_task(
     else:
         target = primary.with_suffix(f".{fmt}")
 
+    # Never write back onto an input. When the resolved output path collides
+    # with the primary or any extra input (e.g. concat a.mp4 → a.mp4 in the
+    # same folder), append a numeric disambiguator so the engine doesn't try
+    # to read and write the same file. Directory-output kinds (which write a
+    # folder, not a file) are exempt.
+    if not cfg.directory_output:
+        inputs = [primary, *extra_inputs]
+        target = _disambiguate(target, inputs)
+
     format_in = "folder" if cfg.directory_input else primary.suffix.lower().lstrip(".")
     return Task(
         input_path=primary,
@@ -105,6 +114,38 @@ def build_task(
         options=dict(options or {}),
         extra_inputs=list(extra_inputs),
     )
+
+
+def _disambiguate(target: Path, inputs: Sequence[Path]) -> Path:
+    """Return ``target``, or a ``-1`` / ``-2`` … variant if it collides.
+
+    Collision is checked (resolved, case-sensitively as the filesystem
+    stores it) against every input path, so the output never overwrites a
+    file the engine is about to read.
+    """
+    blocked = set()
+    for path in inputs:
+        try:
+            blocked.add(path.resolve())
+        except OSError:
+            blocked.add(path)
+
+    def collides(candidate: Path) -> bool:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            resolved = candidate
+        return resolved in blocked
+
+    if not collides(target):
+        return target
+    stem, suffix = target.stem, target.suffix
+    counter = 1
+    while True:
+        candidate = target.with_name(f"{stem}-{counter}{suffix}")
+        if not collides(candidate):
+            return candidate
+        counter += 1
 
 
 # A factory matching create_default_queue's signature, for test injection.
@@ -139,7 +180,11 @@ class QueueController:
         asyncio.set_event_loop(self._loop)
         self._queue = self._queue_factory()
         self._queue.subscribe(self._on_task_event)
-        self._queue.start()
+        # start() may create the dispatcher task (when persistent tasks are
+        # resumed from a prior session), which needs a *running* loop — so
+        # defer it via call_soon to fire once run_forever() is live, rather
+        # than calling it here where get_running_loop() would raise.
+        self._loop.call_soon(self._queue.start)
         self._ready.set()
         self._loop.run_forever()
 
@@ -177,6 +222,21 @@ class QueueController:
         if self._queue is None:
             return []
         return list(self._queue.all())
+
+    def count_by_period(self, granularity: str) -> list[tuple[str, int]]:
+        """Task counts bucketed by ``granularity`` for the activity chart.
+
+        Reads straight from the persistent repository (each call opens its
+        own sqlite connection, so this is safe from the GTK thread). Returns
+        an empty list when the queue is non-persistent or on any read error.
+        """
+        repository = getattr(self._queue, "_repository", None)
+        if repository is None:
+            return []
+        try:
+            return repository.count_by_period(granularity)
+        except Exception:
+            return []
 
     def shutdown(self) -> None:
         """Best-effort graceful stop: close the queue and stop the loop."""

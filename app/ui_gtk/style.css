@@ -16,6 +16,29 @@
   margin: 12px 12px 2px 12px;
 }
 
+/* Header CPU / RAM readout: quiet, fixed-width digits so it doesn't jitter. */
+.resource-monitor {
+  font-size: 0.85em;
+  font-feature-settings: "tnum" 1;
+  color: alpha(currentColor, 0.7);
+  margin-left: 4px;
+}
+
+/* Active state, brand green: the selected sidebar destination and the
+ * active Convert/Queue tab tint their icon + label #3a944a. `color`
+ * recolors both the symbolic (Lucide) icon and the text. */
+.navigation-sidebar row:selected,
+.navigation-sidebar row:selected label,
+.navigation-sidebar row:selected image {
+  color: #3a944a;
+}
+
+viewswitcher button:checked,
+viewswitcher button:checked label,
+viewswitcher button:checked image {
+  color: #3a944a;
+}
+
 /* ---- Drop zone -------------------------------------------------------- */
 /* A dashed card. Empty state is click-to-choose; filled state shows a
  * preview with its own Replace/Remove buttons. */
@@ -101,6 +124,13 @@
 .stat-value {
   font-size: 2.1em;
   font-weight: 800;
+}
+
+/* Activity bar chart card. */
+.activity-chart {
+  padding: 10px 12px;
+  background: @card_bg_color;
+  border-radius: 12px;
 }
 
 /* Engine availability status pills. */
