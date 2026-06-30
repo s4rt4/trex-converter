@@ -49,7 +49,7 @@ class AudioPage:
         # --- File ---------------------------------------------------------
         self.dropzone = DropZone(
             self._on_file_changed,
-            icon="audio",
+            icon="drop-audio",
             empty_title="Drop an audio file here or click to choose",
             empty_subtitle="MP3, WAV, FLAC, M4A, OGG",
         )

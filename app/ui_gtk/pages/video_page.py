@@ -68,7 +68,7 @@ class VideoPage:
         # --- File ---------------------------------------------------------
         self.dropzone = DropZone(
             self._on_file_changed,
-            icon="video",
+            icon="drop-video",
             empty_title="Drop a video here or click to choose",
             empty_subtitle="MP4, MOV, MKV, WebM",
         )

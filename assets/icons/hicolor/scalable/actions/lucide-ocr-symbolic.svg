@@ -9,11 +9,11 @@
    stroke-linecap="round"
    stroke-linejoin="round"
    version="1.1"
-   id="svg6"
+   id="svg3"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
-     id="defs6" />
+     id="defs3" />
   <path
      style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
      d="M 6,1 C 4.3549904,1 3,2.3549904 3,4 v 16 c 0,1.64501 1.3549904,3 3,3 h 12 c 1.64501,0 3,-1.35499 3,-3 V 8.0019531 8 C 21.000952,7.0939406 20.638716,6.2227923 19.996094,5.5839844 L 16.412109,2 l -0.002,-0.00195 C 15.771754,1.3583815 14.903751,0.99905439 14,1 Z m 0,2 h 8 a 1.0001,1.0001 0 0 0 0.002,0 c 0.373356,-6.051e-4 0.730614,0.1476317 0.994141,0.4121094 a 1.0001,1.0001 0 0 0 0,0.00195 l 3.58789,3.5878906 a 1.0001,1.0001 0 0 0 0.0039,0.00195 C 18.853086,7.2675275 19.000608,7.6241159 19,7.9980469 A 1.0001,1.0001 0 0 0 19,8 v 12 c 0,0.564129 -0.435871,1 -1,1 H 6 C 5.4358706,21 5,20.564129 5,20 V 4 C 5,3.4358706 5.4358706,3 6,3 Z"
@@ -24,18 +24,10 @@
      id="path2" />
   <path
      style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
-     d="m 8,11 a 1,1 0 0 0 -1,1 1,1 0 0 0 1,1 h 8 a 1,1 0 0 0 1,-1 1,1 0 0 0 -1,-1 z"
+     d="m 10,9 c -1.6450096,0 -3,1.35499 -3,3 0,1.64501 1.3549904,3 3,3 1.64501,0 3,-1.35499 3,-3 0,-1.64501 -1.35499,-3 -3,-3 z m 0,2 c 0.564129,0 1,0.435871 1,1 0,0.564129 -0.435871,1 -1,1 -0.5641294,0 -1,-0.435871 -1,-1 0,-0.564129 0.4358706,-1 1,-1 z"
+     id="circle2" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
+     d="m 17,14.003906 c -0.874708,0 -1.748519,0.330649 -2.410156,0.992188 l -6.2968752,6.296875 a 1,1 0 0 0 0,1.414062 1,1 0 0 0 1.4140625,0 l 6.2968747,-6.294922 c 0.558995,-0.55891 1.433193,-0.55891 1.992188,0 l 1.296875,1.294922 a 1,1 0 0 0 1.414062,0 1,1 0 0 0 0,-1.414062 L 19.410156,14.996094 C 18.748519,14.334555 17.874708,14.003906 17,14.003906 Z"
      id="path3" />
-  <path
-     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
-     d="m 10,10 a 1,1 0 0 0 -1,1 v 2 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -2 a 1,1 0 0 0 -1,-1 z"
-     id="path4" />
-  <path
-     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
-     d="m 8,16 a 1,1 0 0 0 -1,1 1,1 0 0 0 1,1 h 8 a 1,1 0 0 0 1,-1 1,1 0 0 0 -1,-1 z"
-     id="path5" />
-  <path
-     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
-     d="m 14,15 a 1,1 0 0 0 -1,1 v 2 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -2 a 1,1 0 0 0 -1,-1 z"
-     id="path6" />
 </svg>

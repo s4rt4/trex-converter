@@ -86,7 +86,7 @@ class PdfPage:
         # --- File ---------------------------------------------------------
         self.dropzone = DropZone(
             self._on_file_changed,
-            icon="pdf",
+            icon="drop-pdf",
             empty_title="Drop a PDF here or click to choose",
             empty_subtitle="PDF",
         )

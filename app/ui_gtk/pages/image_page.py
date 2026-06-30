@@ -70,7 +70,7 @@ class ImagePage:
         # --- File ---------------------------------------------------------
         self.dropzone = DropZone(
             self._on_file_changed,
-            icon="image",
+            icon="drop-image",
             empty_title="Drop an image here or click to choose",
             empty_subtitle="PNG, JPEG, WebP, AVIF, HEIC, GIF, TIFF, BMP, ICO, PDF",
         )

@@ -236,7 +236,7 @@ def _default_output_dir() -> Path | None:
 
 class DocumentPage(SingleInputPage):
     KIND = "document"
-    FILE_ICON = "document"
+    FILE_ICON = "drop-document"
     EMPTY_TITLE = "Drop a document here or click to choose"
     EMPTY_SUBTITLE = "DOCX, ODT, XLSX, PPTX, HTML, TXT…"
     OUTPUT_FORMATS = ("pdf", "docx", "odt", "rtf", "txt", "html", "epub")
@@ -275,7 +275,7 @@ class DocumentPage(SingleInputPage):
 
 class SubtitlePage(SingleInputPage):
     KIND = "subtitle"
-    FILE_ICON = "subtitle"
+    FILE_ICON = "drop-subtitle"
     EMPTY_TITLE = "Drop a subtitle here or click to choose"
     EMPTY_SUBTITLE = "SRT, VTT, ASS"
     OUTPUT_FORMATS = ("srt", "vtt", "ass")
@@ -304,7 +304,7 @@ class SubtitlePage(SingleInputPage):
 
 class SubtitleExtractPage(SingleInputPage):
     KIND = "subtitle-extract"
-    FILE_ICON = "subtitle"
+    FILE_ICON = "drop-subtitle"
     EMPTY_TITLE = "Drop a video here or click to choose"
     EMPTY_SUBTITLE = "MKV, MP4, MOV, WebM"
     OUTPUT_FORMATS = ("srt", "vtt", "ass")
@@ -407,7 +407,7 @@ class OcrPage(SingleInputPage):
 
 class EbookPage(SingleInputPage):
     KIND = "ebook"
-    FILE_ICON = "document"
+    FILE_ICON = "drop-document"
     EMPTY_TITLE = "Drop an ebook or document here or click to choose"
     EMPTY_SUBTITLE = "EPUB, DOCX, HTML, Markdown…"
     OUTPUT_FORMATS = ("epub", "pdf", "docx", "html", "fb2", "odt", "txt")
@@ -609,7 +609,7 @@ class SvgPage(SingleInputPage):
 class PdfNumberingPage(SingleInputPage):
     KIND = "pdf-numbering"
     OPERATION = "page_numbering"
-    FILE_ICON = "pdf"
+    FILE_ICON = "drop-pdf"
     EMPTY_TITLE = "Drop a PDF here or click to choose"
     EMPTY_SUBTITLE = "PDF"
     FIXED_FORMAT = "pdf"
@@ -661,7 +661,7 @@ class PdfNumberingPage(SingleInputPage):
 
 class PdfSplitPage(SingleInputPage):
     KIND = "pdf-split"
-    FILE_ICON = "pdf"
+    FILE_ICON = "drop-pdf"
     EMPTY_TITLE = "Drop a PDF here or click to choose"
     EMPTY_SUBTITLE = "PDF"
     DIRECTORY_OUTPUT = True
@@ -716,7 +716,7 @@ class PdfSplitPage(SingleInputPage):
 class PdfExtractImagesPage(SingleInputPage):
     KIND = "pdf-extract-images"
     OPERATION = "extract_images"
-    FILE_ICON = "pdf"
+    FILE_ICON = "drop-pdf"
     EMPTY_TITLE = "Drop a PDF here or click to choose"
     EMPTY_SUBTITLE = "PDF"
     DIRECTORY_OUTPUT = True
@@ -726,7 +726,7 @@ class PdfExtractImagesPage(SingleInputPage):
 class PdfExtractAttachmentsPage(SingleInputPage):
     KIND = "pdf-extract-attachments"
     OPERATION = "extract_attachments"
-    FILE_ICON = "pdf"
+    FILE_ICON = "drop-pdf"
     EMPTY_TITLE = "Drop a PDF here or click to choose"
     EMPTY_SUBTITLE = "PDF"
     DIRECTORY_OUTPUT = True
@@ -739,7 +739,7 @@ class PdfExtractAttachmentsPage(SingleInputPage):
 class SlidesToImagesPage(SingleInputPage):
     KIND = "slides-to-images"
     OPERATION = "slides_to_images"
-    FILE_ICON = "document"
+    FILE_ICON = "drop-document"
     EMPTY_TITLE = "Drop a slide deck here or click to choose"
     EMPTY_SUBTITLE = "PPTX, PPT, ODP"
     DIRECTORY_OUTPUT = True
@@ -772,7 +772,7 @@ class SlidesToImagesPage(SingleInputPage):
 class ArchivePage(SingleInputPage):
     KIND = "archive"
     OPERATION = ""
-    FILE_ICON = "archive"
+    FILE_ICON = "drop-archive"
     EMPTY_TITLE = "Drop an archive here or click to choose"
     EMPTY_SUBTITLE = "ZIP, TAR, GZ, BZ2, XZ…"
     DIRECTORY_OUTPUT = True
@@ -781,7 +781,7 @@ class ArchivePage(SingleInputPage):
 
 class ArchiveCompressPage(SingleInputPage):
     KIND = "archive-compress"
-    FILE_ICON = "archive"
+    FILE_ICON = "drop-archive"
     INPUT_MODE = "folder"
     NEED_INPUT_MESSAGE = "Choose a folder first."
     OUTPUT_FORMATS = ("zip", "tar", "tgz", "tbz", "txz")
