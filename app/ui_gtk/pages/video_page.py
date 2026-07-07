@@ -374,87 +374,89 @@ class VideoPage:
         return opts
 
     def apply_options(self, payload: dict) -> None:
-        if "format_out" in payload:
-            self.format_picker.set_format(str(payload["format_out"]))
-        if "bitrate" in payload:
-            self.audio_bitrate.set_format(str(payload["bitrate"]))
+        """Restore the exact state a preset was saved from.
 
-        if {"trim_start", "trim_end", "stream_copy"} & payload.keys():
-            self.op_trim.row.set_enable_expansion(True)
-            self.trim_start.set_text(str(payload.get("trim_start", "")))
-            self.trim_end.set_text(str(payload.get("trim_end", "")))
-            self.stream_copy.set_active(bool(payload.get("stream_copy")))
+        Controls reset to defaults when their key is absent and each
+        operation is enabled iff the payload carries one of its keys, so
+        loading a preset never leaves earlier configuration active.
+        """
+        self.format_picker.set_format(str(payload.get("format_out", DEFAULT_FORMAT)))
+        self.audio_bitrate.set_format(str(payload.get("bitrate", DEFAULT_BITRATE)))
+
+        trim_keys = {"trim_start", "trim_end", "stream_copy"}
+        self.op_trim.row.set_enable_expansion(bool(trim_keys & payload.keys()))
+        self.trim_start.set_text(str(payload.get("trim_start", "")))
+        self.trim_end.set_text(str(payload.get("trim_end", "")))
+        self.stream_copy.set_active(bool(payload.get("stream_copy")))
 
         transform_keys = {
             "rotation_degrees", "speed", "flip_horizontal", "flip_vertical", "crop",
         }
-        if transform_keys & payload.keys():
-            self.op_transform.row.set_enable_expansion(True)
-            self.rotation.set_value(_as_int(payload.get("rotation_degrees", 0), 0))
-            self.speed.set_value(_as_float(payload.get("speed", 1.0), 1.0))
-            self.flip_h.set_active(bool(payload.get("flip_horizontal")))
-            self.flip_v.set_active(bool(payload.get("flip_vertical")))
-            self.crop.set_text(str(payload.get("crop", "")))
+        self.op_transform.row.set_enable_expansion(bool(transform_keys & payload.keys()))
+        self.rotation.set_value(_as_int(payload.get("rotation_degrees", 0), 0))
+        self.speed.set_value(_as_float(payload.get("speed", 1.0), 1.0))
+        self.flip_h.set_active(bool(payload.get("flip_horizontal")))
+        self.flip_v.set_active(bool(payload.get("flip_vertical")))
+        self.crop.set_text(str(payload.get("crop", "")))
 
-        if "resolution_preset" in payload:
-            self.op_resize.row.set_enable_expansion(True)
-            self.res_preset.set_value(str(payload["resolution_preset"]))
+        self.op_resize.row.set_enable_expansion("resolution_preset" in payload)
+        self.res_preset.set_value(str(payload.get("resolution_preset", "")))
 
-        if {"crf", "target_size_mb", "compress_preset"} & payload.keys():
-            self.op_compress.row.set_enable_expansion(True)
-            self.crf.set_value(_as_int(payload.get("crf", 0), 0))
-            self.target_size.set_value(
-                _as_float(payload.get("target_size_mb", 0.0), 0.0)
-            )
-            if "compress_preset" in payload:
-                self.compress_preset.set_value(str(payload["compress_preset"]))
+        compress_keys = {"crf", "target_size_mb", "compress_preset"}
+        self.op_compress.row.set_enable_expansion(bool(compress_keys & payload.keys()))
+        self.crf.set_value(_as_int(payload.get("crf", 0), 0))
+        self.target_size.set_value(_as_float(payload.get("target_size_mb", 0.0), 0.0))
+        self.compress_preset.set_value(str(
+            payload.get("compress_preset", get_settings().default_video_preset)
+        ))
 
-        if {"watermark_text", "watermark_position", "watermark_size",
-                "watermark_opacity"} & payload.keys():
-            self.op_watermark.row.set_enable_expansion(True)
-            self.wm_text.set_text(str(payload.get("watermark_text", "")))
-            self.wm_position.set_value(str(payload.get("watermark_position", "southeast")))
-            self.wm_size.set_value(_as_int(payload.get("watermark_size", 36), 36))
-            self.wm_opacity.set_value(_as_int(payload.get("watermark_opacity", 60), 60))
+        watermark_keys = {
+            "watermark_text", "watermark_position", "watermark_size",
+            "watermark_opacity",
+        }
+        self.op_watermark.row.set_enable_expansion(bool(watermark_keys & payload.keys()))
+        self.wm_text.set_text(str(payload.get("watermark_text", "")))
+        self.wm_position.set_value(str(payload.get("watermark_position", "southeast")))
+        self.wm_size.set_value(_as_int(payload.get("watermark_size", 36), 36))
+        self.wm_opacity.set_value(_as_int(payload.get("watermark_opacity", 60), 60))
 
-        if {"reverse_video", "logo_path", "logo_position", "logo_width",
-                "logo_opacity"} & payload.keys():
-            self.op_effects.row.set_enable_expansion(True)
-            self.reverse.set_active(bool(payload.get("reverse_video")))
-            self.logo_path.set_text(str(payload.get("logo_path", "")))
-            self.logo_position.set_value(str(payload.get("logo_position", "southeast")))
-            self.logo_width.set_value(_as_int(payload.get("logo_width", 120), 120))
-            self.logo_opacity.set_value(_as_int(payload.get("logo_opacity", 100), 100))
+        effects_keys = {
+            "reverse_video", "logo_path", "logo_position", "logo_width",
+            "logo_opacity",
+        }
+        self.op_effects.row.set_enable_expansion(bool(effects_keys & payload.keys()))
+        self.reverse.set_active(bool(payload.get("reverse_video")))
+        self.logo_path.set_text(str(payload.get("logo_path", "")))
+        self.logo_position.set_value(str(payload.get("logo_position", "southeast")))
+        self.logo_width.set_value(_as_int(payload.get("logo_width", 120), 120))
+        self.logo_opacity.set_value(_as_int(payload.get("logo_opacity", 100), 100))
 
         animation_keys = {
             "gif_fps", "gif_width", "webp_fps", "webp_width", "webp_quality",
         }
-        if animation_keys & payload.keys():
-            self.op_animation.row.set_enable_expansion(True)
-            self.gif_fps.set_value(_as_int(payload.get("gif_fps", 12), 12))
-            self.gif_width.set_value(_as_int(payload.get("gif_width", 480), 480))
-            self.webp_fps.set_value(_as_int(payload.get("webp_fps", 15), 15))
-            self.webp_width.set_value(_as_int(payload.get("webp_width", 480), 480))
-            self.webp_quality.set_value(_as_int(payload.get("webp_quality", 75), 75))
+        self.op_animation.row.set_enable_expansion(bool(animation_keys & payload.keys()))
+        self.gif_fps.set_value(_as_int(payload.get("gif_fps", 12), 12))
+        self.gif_width.set_value(_as_int(payload.get("gif_width", 480), 480))
+        self.webp_fps.set_value(_as_int(payload.get("webp_fps", 15), 15))
+        self.webp_width.set_value(_as_int(payload.get("webp_width", 480), 480))
+        self.webp_quality.set_value(_as_int(payload.get("webp_quality", 75), 75))
 
         thumb_keys = {
             "thumbnail_grid", "thumbnail_rows", "thumbnail_cols",
             "thumbnail_interval", "thumbnail_tile_width",
         }
-        if thumb_keys & payload.keys():
-            self.op_thumbnails.row.set_enable_expansion(True)
-            self.thumb_rows.set_value(_as_int(payload.get("thumbnail_rows", 4), 4))
-            self.thumb_cols.set_value(_as_int(payload.get("thumbnail_cols", 4), 4))
-            self.thumb_interval.set_value(
-                _as_int(payload.get("thumbnail_interval", 60), 60)
-            )
-            self.thumb_tile_width.set_value(
-                _as_int(payload.get("thumbnail_tile_width", 320), 320)
-            )
+        self.op_thumbnails.row.set_enable_expansion(bool(thumb_keys & payload.keys()))
+        self.thumb_rows.set_value(_as_int(payload.get("thumbnail_rows", 4), 4))
+        self.thumb_cols.set_value(_as_int(payload.get("thumbnail_cols", 4), 4))
+        self.thumb_interval.set_value(
+            _as_int(payload.get("thumbnail_interval", 60), 60)
+        )
+        self.thumb_tile_width.set_value(
+            _as_int(payload.get("thumbnail_tile_width", 320), 320)
+        )
 
-        if "burn_subtitle_path" in payload:
-            self.op_subtitles.row.set_enable_expansion(True)
-            self.burn_subtitle.set_text(str(payload["burn_subtitle_path"]))
+        self.op_subtitles.row.set_enable_expansion("burn_subtitle_path" in payload)
+        self.burn_subtitle.set_text(str(payload.get("burn_subtitle_path", "")))
 
         self._refresh_summaries()
 

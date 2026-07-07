@@ -131,6 +131,14 @@ class TaskQueue:
                 self._slots.release()
                 self._pending.task_done()
                 break
+            # Re-check after the await: the task may have been cancelled
+            # while we were parked waiting for a slot, and mark_running()
+            # must never overwrite that.
+            if task.status != TaskStatus.PENDING:
+                self._slots.release()
+                self._pending.task_done()
+                self._update_idle()
+                continue
 
             worker = asyncio.create_task(self._run_task(task))
             self._running[task.id] = worker
@@ -149,6 +157,10 @@ class TaskQueue:
             self._idle.set()
 
     async def _run_task(self, task: Task) -> None:
+        if task.status != TaskStatus.PENDING:
+            # Cancelled between being handed to the worker and the worker's
+            # first step — don't resurrect it to RUNNING.
+            return
         try:
             engine = self._resolve_engine(task)
             self._running_engines[task.id] = engine

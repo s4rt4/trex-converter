@@ -272,47 +272,43 @@ class PdfPage:
         )
 
     def apply_options(self, payload: dict) -> None:
+        """Restore the exact state a preset was saved from.
+
+        Every field resets to its build-time default when its key is
+        absent, so a loaded preset can't inherit stale values (e.g. a
+        leftover page range) from whatever was configured before.
+        """
         op = payload.get("operation", "extract_pages")
+
+        # Watermark fields (shared by text/image variants).
+        self.wm_image.set_text(str(payload.get("watermark_image_path", "")))
+        self.wm_text.set_text(str(payload.get("watermark_text", "")))
+        self.wm_position.set_value(str(payload.get("watermark_position", "center")))
+        self.wm_size.set_value(_as_int(payload.get("watermark_size", 48), 48))
+        self.wm_image_width.set_value(round(_as_float(
+            payload.get("watermark_image_width_fraction", 0.25), 0.25
+        ) * 100))
+        self.wm_opacity.set_value(_as_int(payload.get("watermark_opacity", 35), 35))
+
+        # Everything else, reset-or-restore.
+        pages = str(payload.get("pages", ""))
+        self.pages.set_text(pages)
+        self.redact_pages.set_text(pages)
+        self.rotation.set_value(_as_int(payload.get("rotation_degrees", 90), 90))
+        self.password_user.set_text(str(payload.get("password_user", "")))
+        self.password_owner.set_text(str(payload.get("password_owner", "")))
+        self.password.set_text(str(payload.get("password", "")))
+        self.dpi.set_value(_as_int(payload.get("compress_images_target_dpi", 150), 150))
+        self.quality.set_value(_as_int(payload.get("compress_images_quality", 75), 75))
+        self.redact_terms.set_text(str(payload.get("redact_terms", "")))
+        self.redact_color.set_value(str(payload.get("redact_color", "black")))
+        for key, entry in self._meta_entries():
+            entry.set_text(str(payload.get(key, "")))
+
         if op in ("watermark_image", "watermark_text"):
             self.operation.set_value("watermark")
-            self.wm_image.set_text(str(payload.get("watermark_image_path", "")))
-            self.wm_text.set_text(str(payload.get("watermark_text", "")))
-            if "watermark_position" in payload:
-                self.wm_position.set_value(str(payload["watermark_position"]))
-            if "watermark_size" in payload:
-                self.wm_size.set_value(_as_int(payload["watermark_size"], 48))
-            if "watermark_image_width_fraction" in payload:
-                self.wm_image_width.set_value(
-                    round(_as_float(payload["watermark_image_width_fraction"], 0.25) * 100)
-                )
-            if "watermark_opacity" in payload:
-                self.wm_opacity.set_value(_as_int(payload["watermark_opacity"], 35))
-            self._sync_visibility()
-            return
-
-        self.operation.set_value(op)
-        if "pages" in payload:
-            self.pages.set_text(str(payload["pages"]))
-            self.redact_pages.set_text(str(payload["pages"]))
-        if "rotation_degrees" in payload:
-            self.rotation.set_value(_as_int(payload["rotation_degrees"], 90))
-        if "password_user" in payload:
-            self.password_user.set_text(str(payload["password_user"]))
-        if "password_owner" in payload:
-            self.password_owner.set_text(str(payload["password_owner"]))
-        if "password" in payload:
-            self.password.set_text(str(payload["password"]))
-        if "compress_images_target_dpi" in payload:
-            self.dpi.set_value(_as_int(payload["compress_images_target_dpi"], 150))
-        if "compress_images_quality" in payload:
-            self.quality.set_value(_as_int(payload["compress_images_quality"], 75))
-        if "redact_terms" in payload:
-            self.redact_terms.set_text(str(payload["redact_terms"]))
-        if "redact_color" in payload:
-            self.redact_color.set_value(str(payload["redact_color"]))
-        for key, entry in self._meta_entries():
-            if key in payload:
-                entry.set_text(str(payload[key]))
+        else:
+            self.operation.set_value(op)
         self._sync_visibility()
 
     # -- actions -----------------------------------------------------------

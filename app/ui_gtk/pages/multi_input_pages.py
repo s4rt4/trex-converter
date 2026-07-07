@@ -133,8 +133,12 @@ class MultiInputPage:
         return opts
 
     def apply_options(self, payload: dict) -> None:
-        if self.format_picker is not None and "format_out" in payload:
-            self.format_picker.set_format(str(payload["format_out"]))
+        if self.format_picker is not None:
+            # Reset to the page default when the preset carries no format,
+            # so loading never inherits a previously chosen format.
+            fmt = payload.get("format_out", self.DEFAULT_FORMAT)
+            if fmt:
+                self.format_picker.set_format(str(fmt))
         self._apply_extra(payload)
         self._refresh_summaries()
 

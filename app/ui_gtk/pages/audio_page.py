@@ -256,41 +256,47 @@ class AudioPage:
         )
 
     def apply_options(self, payload: dict) -> None:
-        if "format_out" in payload:
-            self.format_picker.set_format(str(payload["format_out"]))
-        if "bitrate" in payload:
-            self.bitrate.set_format(str(payload["bitrate"]))
-        if "audio_channels" in payload:
-            self.channels.set_value(str(payload["audio_channels"]))
-        if "sample_rate" in payload:
-            self.sample_rate.set_value(str(payload["sample_rate"]))
+        """Restore the exact state a preset was saved from.
 
-        if {"trim_start", "trim_end"} & payload.keys():
-            self.op_trim.row.set_enable_expansion(True)
-            self.trim_start.set_text(str(payload.get("trim_start", "")))
-            self.trim_end.set_text(str(payload.get("trim_end", "")))
+        Controls reset to defaults when their key is absent and each
+        operation is enabled iff the payload carries one of its keys, so
+        loading a preset never leaves earlier configuration active.
+        """
+        settings = get_settings()
+        bitrate_default = (
+            settings.default_audio_bitrate
+            if settings.default_audio_bitrate in AUDIO_BITRATES
+            else "192k"
+        )
+        self.format_picker.set_format(str(payload.get("format_out", DEFAULT_FORMAT)))
+        self.bitrate.set_format(str(payload.get("bitrate", bitrate_default)))
+        self.channels.set_value(str(payload.get("audio_channels", "")))
+        self.sample_rate.set_value(str(payload.get("sample_rate", "")))
+
+        trim_keys = {"trim_start", "trim_end"}
+        self.op_trim.row.set_enable_expansion(bool(trim_keys & payload.keys()))
+        self.trim_start.set_text(str(payload.get("trim_start", "")))
+        self.trim_end.set_text(str(payload.get("trim_end", "")))
 
         effects_keys = {
             "fade_in_duration", "fade_out_duration", "fade_out_start",
             "volume_db", "loudnorm", "vocal_remove",
         }
-        if effects_keys & payload.keys():
-            self.op_effects.row.set_enable_expansion(True)
-            self.fade_in.set_value(_as_float(payload.get("fade_in_duration", 0.0), 0.0))
-            self.fade_out.set_value(_as_float(payload.get("fade_out_duration", 0.0), 0.0))
-            self.fade_out_start.set_value(
-                _as_float(payload.get("fade_out_start", 0.0), 0.0)
-            )
-            self.volume.set_value(_as_float(payload.get("volume_db", 0), 0))
-            self.loudnorm.set_active(bool(payload.get("loudnorm")))
-            self.vocal_remove.set_active(bool(payload.get("vocal_remove")))
+        self.op_effects.row.set_enable_expansion(bool(effects_keys & payload.keys()))
+        self.fade_in.set_value(_as_float(payload.get("fade_in_duration", 0.0), 0.0))
+        self.fade_out.set_value(_as_float(payload.get("fade_out_duration", 0.0), 0.0))
+        self.fade_out_start.set_value(
+            _as_float(payload.get("fade_out_start", 0.0), 0.0)
+        )
+        self.volume.set_value(_as_float(payload.get("volume_db", 0), 0))
+        self.loudnorm.set_active(bool(payload.get("loudnorm")))
+        self.vocal_remove.set_active(bool(payload.get("vocal_remove")))
 
         tag_keys = {key for key, _ in self._tag_entries()} | {"cover_art_path"}
-        if tag_keys & payload.keys():
-            self.op_tags.row.set_enable_expansion(True)
-            for key, entry in self._tag_entries():
-                entry.set_text(str(payload.get(key, "")))
-            self.cover_art.set_text(str(payload.get("cover_art_path", "")))
+        self.op_tags.row.set_enable_expansion(bool(tag_keys & payload.keys()))
+        for key, entry in self._tag_entries():
+            entry.set_text(str(payload.get(key, "")))
+        self.cover_art.set_text(str(payload.get("cover_art_path", "")))
 
         self._refresh_summaries()
 

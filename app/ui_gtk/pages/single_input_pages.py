@@ -166,8 +166,12 @@ class SingleInputPage:
         return opts
 
     def apply_options(self, payload: dict) -> None:
-        if self.format_picker is not None and "format_out" in payload:
-            self.format_picker.set_format(str(payload["format_out"]))
+        if self.format_picker is not None:
+            # Reset to the page default when the preset carries no format,
+            # so loading never inherits a previously chosen format.
+            fmt = payload.get("format_out", self.DEFAULT_FORMAT)
+            if fmt:
+                self.format_picker.set_format(str(fmt))
         self._apply_extra(payload)
         self._sync()
 
@@ -870,8 +874,7 @@ class MetadataPage(SingleInputPage):
         op = payload.get("operation", "strip")
         if op in {v for _, v in self._OPERATIONS}:
             self.operation.set_value(op)
-        if "metadata_format" in payload:
-            self.read_format.set_value(str(payload["metadata_format"]))
+        self.read_format.set_value(str(payload.get("metadata_format", "json")))
         for key, entry in self._fields.items():
             entry.set_text(str(payload.get(key, "")))
 
