@@ -98,12 +98,11 @@ def build_task(
 
     # Never write back onto an input. When the resolved output path collides
     # with the primary or any extra input (e.g. concat a.mp4 → a.mp4 in the
-    # same folder), append a numeric disambiguator so the engine doesn't try
-    # to read and write the same file. Directory-output kinds (which write a
-    # folder, not a file) are exempt.
-    if not cfg.directory_output:
-        inputs = [primary, *extra_inputs]
-        target = _disambiguate(target, inputs)
+    # same folder, or an extensionless input whose stem *is* its name on a
+    # directory-output kind), append a numeric disambiguator so the engine
+    # doesn't try to read and write the same file.
+    inputs = [primary, *extra_inputs]
+    target = _disambiguate(target, inputs)
 
     format_in = "folder" if cfg.directory_input else primary.suffix.lower().lstrip(".")
     return Task(
@@ -120,9 +119,10 @@ def build_task(
 def _disambiguate(target: Path, inputs: Sequence[Path]) -> Path:
     """Return ``target``, or a ``-1`` / ``-2`` … variant if it collides.
 
-    Collision is checked (resolved, case-sensitively as the filesystem
-    stores it) against every input path, so the output never overwrites a
-    file the engine is about to read.
+    Collision is checked against every input path — by resolved path, and
+    by ``samefile`` for filesystems where two spellings reach one file
+    (case-insensitive mounts: ``PIC.JPG`` → ``PIC.jpg``) — so the output
+    never overwrites a file the engine is about to read.
     """
     blocked = set()
     for path in inputs:
@@ -136,7 +136,16 @@ def _disambiguate(target: Path, inputs: Sequence[Path]) -> Path:
             resolved = candidate.resolve()
         except OSError:
             resolved = candidate
-        return resolved in blocked
+        if resolved in blocked:
+            return True
+        if candidate.exists():
+            for path in inputs:
+                try:
+                    if candidate.samefile(path):
+                        return True
+                except OSError:
+                    continue
+        return False
 
     if not collides(target):
         return target

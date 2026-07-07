@@ -27,8 +27,11 @@ from app.ui_gtk.widgets.rows import ChoiceRow, attach_file_browse, spin_row
 KIND = "pdf"
 
 # Operation picker — flattened from the six old tabs. "watermark" is a UI
-# token resolved to watermark_image / watermark_text at collect time.
+# token resolved to watermark_image / watermark_text at collect time;
+# "convert" is a UI token for the engine's format conversions (pdf→image/
+# text/document), which the old registry-driven format combo exposed.
 OPERATIONS = (
+    ("Convert to another format", "convert"),
     ("Extract pages", "extract_pages"),
     ("Reorder pages", "reorder"),
     ("Rotate pages", "rotate"),
@@ -55,8 +58,20 @@ REDACT_COLORS = (
     ("Black", "black"), ("White", "white"), ("Red", "red"), ("Yellow", "yellow"),
 )
 
+# Non-PDF outputs the pdf engine can produce (SUPPORTED_PAIRS, sans folder).
+CONVERT_FORMATS = (
+    ("PNG (one image per page)", "png"),
+    ("JPG (one image per page)", "jpg"),
+    ("Text (.txt)", "txt"),
+    ("HTML", "html"),
+    ("Word (.docx)", "docx"),
+    ("EPUB", "epub"),
+)
+_CONVERT_IMAGE_FORMATS = {"png", "jpg", "jpeg"}
+
 # Which parameter rows each operation reveals.
 _VISIBILITY = {
+    "convert": {"convert_format", "convert_dpi", "pages"},
     "extract_pages": {"pages"},
     "reorder": {"pages"},
     "rotate": {"pages", "rotation"},
@@ -93,12 +108,14 @@ class PdfPage:
         file_group = Adw.PreferencesGroup(title="File")
         file_group.add(self.dropzone)
 
-        # --- Output (PDF, fixed) + Operation picker -----------------------
+        # --- Output + Operation picker -------------------------------------
+        # The format row mirrors the operation: PDF for the tools, the
+        # chosen target for "Convert to another format".
         output_group = Adw.PreferencesGroup(title="Output")
-        fixed = Adw.ActionRow(title="Format")
-        fixed.set_subtitle("PDF")
-        fixed.set_activatable(False)
-        output_group.add(fixed)
+        self._format_row = Adw.ActionRow(title="Format")
+        self._format_row.set_subtitle("PDF")
+        self._format_row.set_activatable(False)
+        output_group.add(self._format_row)
         self.destination = DestinationRow(initial=_default_output_dir())
         output_group.add(self.destination.row)
 
@@ -137,6 +154,14 @@ class PdfPage:
         self.pages = Adw.EntryRow(title="Pages — 1-3,5,8-10 (blank = all)")
         self.rotation = ChoiceRow("Rotation", ROTATIONS, 90)
 
+        self.convert_format = ChoiceRow("Convert to", CONVERT_FORMATS, "png")
+        self.convert_format.row.connect(
+            "notify::selected", self._sync_visibility
+        )
+        self.convert_dpi = spin_row(
+            "Render DPI", 72, 600, get_settings().default_pdf_dpi
+        )
+
         self.password_user = Adw.PasswordEntryRow(title="User password")
         self.password_owner = Adw.PasswordEntryRow(title="Owner password")
         self.password = Adw.PasswordEntryRow(title="Password")
@@ -163,6 +188,8 @@ class PdfPage:
         self.meta_creator = Adw.EntryRow(title="Creator")
 
         self._rows = {
+            "convert_format": self.convert_format.row,
+            "convert_dpi": self.convert_dpi,
             "pages": self.pages,
             "rotation": self.rotation.row,
             "password_user": self.password_user,
@@ -189,7 +216,15 @@ class PdfPage:
             self._params.add(row)
 
     def _sync_visibility(self, *_args) -> None:
-        visible = _VISIBILITY.get(self.operation.get_value(), set())
+        op = self.operation.get_value()
+        visible = set(_VISIBILITY.get(op, set()))
+        if op == "convert":
+            fmt = self.convert_format.get_value()
+            if fmt not in _CONVERT_IMAGE_FORMATS:
+                visible.discard("convert_dpi")  # DPI only applies to images
+            self._format_row.set_subtitle(fmt.upper())
+        else:
+            self._format_row.set_subtitle("PDF")
         for key, row in self._rows.items():
             row.set_visible(key in visible)
         # The Parameters group is empty for operations with no inputs.
@@ -203,6 +238,18 @@ class PdfPage:
     def collect_options(self) -> dict:
         op = self.operation.get_value()
         opts: dict[str, object] = {"category": KIND, "format_out": "pdf"}
+
+        if op == "convert":
+            # Plain format conversion: the engine dispatches on format_out
+            # alone, no operation key.
+            fmt = self.convert_format.get_value()
+            opts["format_out"] = fmt
+            if fmt in _CONVERT_IMAGE_FORMATS:
+                opts["dpi"] = int(self.convert_dpi.get_value())
+            pages = self.pages.get_text().strip()
+            if pages:
+                opts["pages"] = pages
+            return opts
 
         if op == "watermark":
             return self._collect_watermark(opts)
@@ -278,7 +325,20 @@ class PdfPage:
         absent, so a loaded preset can't inherit stale values (e.g. a
         leftover page range) from whatever was configured before.
         """
-        op = payload.get("operation", "extract_pages")
+        fmt = str(payload.get("format_out", "pdf")).lower()
+        if "operation" in payload:
+            op = str(payload["operation"])
+        elif fmt != "pdf":
+            op = "convert"  # plain conversion presets carry no operation key
+        else:
+            op = "extract_pages"
+
+        # Convert fields.
+        self.convert_format.set_value(fmt if fmt != "pdf" else "png")
+        self.convert_dpi.set_value(_as_int(
+            payload.get("dpi", get_settings().default_pdf_dpi),
+            get_settings().default_pdf_dpi,
+        ))
 
         # Watermark fields (shared by text/image variants).
         self.wm_image.set_text(str(payload.get("watermark_image_path", "")))

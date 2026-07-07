@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from shutil import which
 
 from app.core.task import Task
@@ -55,6 +56,9 @@ class ImageMagickEngine(BaseEngine):
         self._processes: dict[str, asyncio.subprocess.Process] = {}
 
     async def convert(self, task: Task) -> None:
+        # magick won't create missing directories; a resumed task whose
+        # output folder was deleted since queueing would fail otherwise.
+        Path(task.output_path).parent.mkdir(parents=True, exist_ok=True)
         command = self._build_command(task)
         task.append_log("Running: " + " ".join(command))
         process = await asyncio.create_subprocess_exec(

@@ -96,6 +96,9 @@ class FFmpegEngine(BaseEngine):
         self._processes: dict[str, asyncio.subprocess.Process] = {}
 
     async def convert(self, task: Task) -> None:
+        # ffmpeg won't create missing directories; a resumed task whose
+        # output folder was deleted since queueing would fail otherwise.
+        Path(task.output_path).parent.mkdir(parents=True, exist_ok=True)
         if _should_run_two_pass(task):
             await self._run_two_pass(task)
             return

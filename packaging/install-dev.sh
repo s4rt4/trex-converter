@@ -39,7 +39,7 @@ cat > "$DESKTOP_FILE" <<EOF
 Type=Application
 Name=T-Rex Converter
 Comment=Convert media, images, documents, and PDFs locally
-Exec=env PYTHONPATH=$REPO_ROOT $PYTHON -m app.gtk_main
+Exec=env "PYTHONPATH=$REPO_ROOT" "$PYTHON" -m app.gtk_main
 Path=$REPO_ROOT
 Icon=$APP_ID
 Terminal=false
