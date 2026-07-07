@@ -168,6 +168,7 @@ class QueueController:
         self._on_change = on_change
         self._queue_factory = queue_factory
         self._queue = None
+        self._startup_error: BaseException | None = None
         self._loop = asyncio.new_event_loop()
         self._ready = threading.Event()
         self._thread = threading.Thread(
@@ -175,11 +176,21 @@ class QueueController:
         )
         self._thread.start()
         self._ready.wait()
+        if self._startup_error is not None:
+            raise RuntimeError(
+                "The conversion queue could not start"
+            ) from self._startup_error
 
     def _run_loop(self) -> None:
         asyncio.set_event_loop(self._loop)
-        self._queue = self._queue_factory()
-        self._queue.subscribe(self._on_task_event)
+        try:
+            queue = self._queue_factory()
+            queue.subscribe(self._on_task_event)
+        except BaseException as exc:  # surface to __init__, don't hang it
+            self._startup_error = exc
+            self._ready.set()
+            return
+        self._queue = queue
         # start() may create the dispatcher task (when persistent tasks are
         # resumed from a prior session), which needs a *running* loop — so
         # defer it via call_soon to fire once run_forever() is live, rather

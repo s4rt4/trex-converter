@@ -52,7 +52,24 @@ class TrexApplication(Adw.Application):
     def _attach_queue(self) -> None:
         from app.ui_gtk.backend import QueueController
 
-        self._queue = QueueController(on_change=self._window.on_tasks_changed)
+        try:
+            self._queue = QueueController(on_change=self._window.on_tasks_changed)
+        except RuntimeError as exc:
+            # Corrupt task DB / bad settings: keep the window usable and
+            # explain, instead of dying (or, worse, hanging) before it maps.
+            self._queue = None
+            cause = exc.__cause__ or exc
+            dialog = Adw.AlertDialog(
+                heading="Conversion queue unavailable",
+                body=(
+                    "The background conversion queue failed to start, so "
+                    "converting is disabled.\n\nDetails: "
+                    f"{cause.__class__.__name__}: {cause}"
+                ),
+            )
+            dialog.add_response("close", "Close")
+            dialog.present(self._window)
+            return
         self._window.attach_queue(self._queue)
 
     def do_shutdown(self) -> None:

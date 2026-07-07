@@ -10,8 +10,8 @@ reorganised into six operation rows. See `feature-map-old-ui` §C-Image /
 "emit only when changed/non-empty" rule, additionally gated by each
 operation's enable switch.
 
-Scope note: Convert / Add to queue validate input but are not wired to
-the conversion engine until the Queue step.
+Convert / Add to queue submit through ``window.enqueue`` to the shared
+TaskQueue (see app.ui_gtk.backend).
 """
 
 from __future__ import annotations
@@ -91,6 +91,7 @@ class ImagePage:
         self.strip_row = Adw.SwitchRow(
             title="Remove metadata",
             subtitle="Strip EXIF and other embedded data",
+            active=True,  # the Qt app shipped with strip on; keep that default
         )
         output_group = Adw.PreferencesGroup(title="Output")
         output_group.add(self.format_picker.row)
@@ -417,76 +418,86 @@ class ImagePage:
         return opts
 
     def apply_options(self, payload: dict) -> None:
-        if "format_out" in payload:
-            self.format_picker.set_format(str(payload["format_out"]))
-        if "quality" in payload:
-            self.quality.set_value(_as_int(payload["quality"], self.quality.get_value()))
-        if "strip" in payload:
-            self.strip_row.set_active(bool(payload["strip"]))
+        """Restore the exact state a preset was saved from.
+
+        Every control is reset to its default when its key is absent, and
+        every operation is enabled *iff* the payload carries one of its
+        keys — loading a preset must never leave a previously configured
+        operation active on top of it.
+        """
+        self.format_picker.set_format(str(payload.get("format_out", DEFAULT_FORMAT)))
+        self.quality.set_value(_as_int(
+            payload.get("quality", get_settings().default_image_quality),
+            get_settings().default_image_quality,
+        ))
+        self.strip_row.set_active(bool(payload.get("strip", True)))
 
         rotate_keys = {"rotate", "flip", "flop"}
-        if rotate_keys & payload.keys():
-            self.op_rotate.row.set_enable_expansion(True)
-            self.rotate.set_value(_as_int(payload.get("rotate", 0), 0))
-            self.flip_v.set_active(bool(payload.get("flip")))
-            self.flip_h.set_active(bool(payload.get("flop")))
+        self.op_rotate.row.set_enable_expansion(bool(rotate_keys & payload.keys()))
+        self.rotate.set_value(_as_int(payload.get("rotate", 0), 0))
+        self.flip_v.set_active(bool(payload.get("flip")))
+        self.flip_h.set_active(bool(payload.get("flop")))
 
         resize_keys = {
             "auto_trim", "crop_aspect", "crop", "resize", "resize_mode",
             "density", "fit_canvas", "fit_canvas_background",
         }
-        if resize_keys & payload.keys():
-            self.op_resize.row.set_enable_expansion(True)
-            self.auto_trim.set_active(bool(payload.get("auto_trim")))
-            self.aspect.set_value(str(payload.get("crop_aspect", "free")))
-            self.crop_free.set_text(str(payload.get("crop", "")))
-            self.resize_mode.set_value(str(payload.get("resize_mode", "dimension")))
-            self.resize_value.set_text(str(payload.get("resize", "")))
-            self.density.set_value(_as_int(payload.get("density", 0), 0))
-            self.fit_canvas.set_text(str(payload.get("fit_canvas", "")))
-            self.fit_canvas_bg.set_text(str(payload.get("fit_canvas_background", "")))
+        self.op_resize.row.set_enable_expansion(bool(resize_keys & payload.keys()))
+        self.auto_trim.set_active(bool(payload.get("auto_trim")))
+        self.aspect.set_value(str(payload.get("crop_aspect", "free")))
+        self.crop_free.set_text(str(payload.get("crop", "")))
+        self.resize_mode.set_value(str(payload.get("resize_mode", "dimension")))
+        self.resize_value.set_text(str(payload.get("resize", "")))
+        self.density.set_value(_as_int(payload.get("density", 0), 0))
+        self.fit_canvas.set_text(str(payload.get("fit_canvas", "")))
+        self.fit_canvas_bg.set_text(str(payload.get("fit_canvas_background", "")))
 
         color_keys = {
             "grayscale", "negate", "normalize", "sepia",
             "brightness", "contrast", "gamma",
         }
-        if color_keys & payload.keys():
-            self.op_color.row.set_enable_expansion(True)
-            self.grayscale.set_active(bool(payload.get("grayscale")))
-            self.negate.set_active(bool(payload.get("negate")))
-            self.normalize.set_active(bool(payload.get("normalize")))
-            self.sepia.set_value(_as_int(payload.get("sepia", 0), 0))
-            self.brightness.set_value(_as_int(payload.get("brightness", 0), 0))
-            self.contrast.set_value(_as_int(payload.get("contrast", 0), 0))
-            self.gamma.set_value(_as_float(payload.get("gamma", 1.0), 1.0))
+        self.op_color.row.set_enable_expansion(bool(color_keys & payload.keys()))
+        self.grayscale.set_active(bool(payload.get("grayscale")))
+        self.negate.set_active(bool(payload.get("negate")))
+        self.normalize.set_active(bool(payload.get("normalize")))
+        self.sepia.set_value(_as_int(payload.get("sepia", 0), 0))
+        self.brightness.set_value(_as_int(payload.get("brightness", 0), 0))
+        self.contrast.set_value(_as_int(payload.get("contrast", 0), 0))
+        self.gamma.set_value(_as_float(payload.get("gamma", 1.0), 1.0))
 
         filter_keys = {"blur", "sharpen", "denoise", "vignette"}
-        if filter_keys & payload.keys():
-            self.op_filter.row.set_enable_expansion(True)
-            self.blur.set_value(_as_float(payload.get("blur", 0.0), 0.0))
-            self.sharpen.set_value(_as_float(payload.get("sharpen", 0.0), 0.0))
-            self.denoise.set_active(bool(payload.get("denoise")))
-            self.vignette.set_active(bool(payload.get("vignette")))
+        self.op_filter.row.set_enable_expansion(bool(filter_keys & payload.keys()))
+        self.blur.set_value(_as_float(payload.get("blur", 0.0), 0.0))
+        self.sharpen.set_value(_as_float(payload.get("sharpen", 0.0), 0.0))
+        self.denoise.set_active(bool(payload.get("denoise")))
+        self.vignette.set_active(bool(payload.get("vignette")))
 
         border_keys = {"border_size", "border_color", "frame_size"}
-        if border_keys & payload.keys():
-            self.op_border.row.set_enable_expansion(True)
-            self.border_size.set_value(_as_int(payload.get("border_size", 0), 0))
-            self.border_color.set_text(str(payload.get("border_color", "")))
-            self.frame_size.set_value(_as_int(payload.get("frame_size", 0), 0))
+        self.op_border.row.set_enable_expansion(bool(border_keys & payload.keys()))
+        self.border_size.set_value(_as_int(payload.get("border_size", 0), 0))
+        self.border_color.set_text(str(payload.get("border_color", "")))
+        self.frame_size.set_value(_as_int(payload.get("frame_size", 0), 0))
 
         watermark_keys = {
             "watermark_text", "watermark_position", "watermark_opacity",
             "watermark_size", "watermark_image_path", "watermark_image_width",
+            "watermark_image_position", "watermark_image_opacity",
         }
-        if watermark_keys & payload.keys():
-            self.op_watermark.row.set_enable_expansion(True)
-            self.wm_text.set_text(str(payload.get("watermark_text", "")))
-            self.wm_position.set_value(str(payload.get("watermark_position", "southeast")))
-            self.wm_opacity.set_value(_as_int(payload.get("watermark_opacity", 60), 60))
-            self.wm_size.set_value(_as_int(payload.get("watermark_size", 36), 36))
-            self.wm_image.set_text(str(payload.get("watermark_image_path", "")))
-            self.wm_image_width.set_value(_as_int(payload.get("watermark_image_width", 0), 0))
+        self.op_watermark.row.set_enable_expansion(bool(watermark_keys & payload.keys()))
+        self.wm_text.set_text(str(payload.get("watermark_text", "")))
+        # Position/opacity are shared controls; an image-only watermark
+        # stores them under the watermark_image_* keys.
+        position = payload.get(
+            "watermark_position", payload.get("watermark_image_position", "southeast")
+        )
+        opacity = payload.get(
+            "watermark_opacity", payload.get("watermark_image_opacity", 60)
+        )
+        self.wm_position.set_value(str(position))
+        self.wm_opacity.set_value(_as_int(opacity, 60))
+        self.wm_size.set_value(_as_int(payload.get("watermark_size", 36), 36))
+        self.wm_image.set_text(str(payload.get("watermark_image_path", "")))
+        self.wm_image_width.set_value(_as_int(payload.get("watermark_image_width", 0), 0))
 
         self._refresh_summaries()
 

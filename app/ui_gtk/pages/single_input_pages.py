@@ -849,13 +849,22 @@ class MetadataPage(SingleInputPage):
     def _collect_extra(self, opts):
         op = self.operation.get_value()
         opts["operation"] = op
+        # exiftool only supports (fmt → fmt) for strip/edit and (fmt → txt)
+        # for read; without this the kind default ("jpg") is used and every
+        # non-JPG input is rejected by the engine.
         if op == "read":
             opts["metadata_format"] = self.read_format.get_value()
-        elif op == "edit":
-            for key, entry in self._fields.items():
-                value = entry.get_text().strip()
-                if value:
-                    opts[key] = value
+            opts["format_out"] = "txt"
+        else:
+            if self.dropzone.path is not None:
+                suffix = self.dropzone.path.suffix.lower().lstrip(".")
+                if suffix:
+                    opts["format_out"] = suffix
+            if op == "edit":
+                for key, entry in self._fields.items():
+                    value = entry.get_text().strip()
+                    if value:
+                        opts[key] = value
 
     def _apply_extra(self, payload):
         op = payload.get("operation", "strip")

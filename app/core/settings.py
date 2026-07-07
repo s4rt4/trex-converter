@@ -60,14 +60,17 @@ class Settings:
             return cls()
         if not isinstance(data, dict):
             return cls()
-        valid_keys = {field.name for field in fields(cls)}
-        kwargs = {key: value for key, value in data.items() if key in valid_keys}
         instance = cls()
-        for key, value in kwargs.items():
-            try:
-                setattr(instance, key, value)
-            except (TypeError, ValueError):
+        for field in fields(cls):
+            if field.name not in data:
                 continue
+            value = data[field.name]
+            # JSON can hold any type and setattr on a dataclass never
+            # validates; only accept values of the declared type (exact —
+            # bool is not an acceptable int) so one hand-edited entry
+            # can't crash consumers like max(1, max_concurrency).
+            if type(value) is type(getattr(instance, field.name)):
+                setattr(instance, field.name, value)
         return instance
 
     def save(self, path: Path = SETTINGS_PATH) -> None:
