@@ -15,6 +15,8 @@ Layout (see rewrite plan §3):
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from gi.repository import Adw, Gtk
 
 from app.ui_gtk.icons import icon_name
@@ -42,6 +44,26 @@ _SCHEME_FROM_SETTING = {
     "default": Adw.ColorScheme.DEFAULT,
     "light": Adw.ColorScheme.FORCE_LIGHT,
     "dark": Adw.ColorScheme.FORCE_DARK,
+}
+
+# File extension → converter destination, for routing files dropped on
+# the dashboard's quick-convert card straight to the right page.
+_KIND_BY_EXT: dict[str, str] = {
+    **{e: "image" for e in (
+        "png", "jpg", "jpeg", "webp", "avif", "heic", "gif",
+        "bmp", "tiff", "tif", "ico",
+    )},
+    "svg": "svg",
+    **{e: "video" for e in ("mp4", "mkv", "mov", "avi", "webm", "m4v")},
+    **{e: "audio" for e in ("mp3", "wav", "m4a", "flac", "aac", "opus", "ogg")},
+    "pdf": "pdf",
+    **{e: "document" for e in (
+        "doc", "docx", "odt", "rtf", "txt", "md",
+        "ppt", "pptx", "odp", "xls", "xlsx", "ods",
+    )},
+    **{e: "subtitle" for e in ("srt", "vtt", "ass")},
+    **{e: "archive" for e in ("zip", "tar", "gz", "bz2", "xz", "7z", "tgz")},
+    **{e: "ebook" for e in ("epub", "mobi", "fb2")},
 }
 
 # Destinations with a real page. Everything else falls back to a
@@ -313,6 +335,30 @@ class TrexWindow(Adw.ApplicationWindow):
         row = self._rows_by_id.get(item_id)
         if row is not None:
             self._listbox.select_row(row)
+
+    def navigate_to(self, item_id: str) -> None:
+        """Public navigation entry point (dashboard shortcuts etc.)."""
+        self._select(item_id)
+
+    def open_with_file(self, path: Path) -> bool:
+        """Route ``path`` to the converter page for its file type.
+
+        Navigates there and pre-loads the file in the page's drop zone.
+        Returns False (with a toast) when the extension isn't recognised.
+        """
+        kind = _KIND_BY_EXT.get(path.suffix.lower().lstrip("."))
+        if kind is None:
+            self.show_toast(
+                "Couldn't match that file type to a converter — "
+                "pick a destination from the sidebar."
+            )
+            return False
+        self._select(kind)
+        page = getattr(self._convert_pages.get(kind), "_trex_page", None)
+        dropzone = getattr(page, "dropzone", None)
+        if dropzone is not None:
+            dropzone.set_path(path)
+        return True
 
     def _show_destination(self, item_id: str) -> None:
         item = find_item(item_id)

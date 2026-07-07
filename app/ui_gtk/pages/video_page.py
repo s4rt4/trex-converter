@@ -521,4 +521,6 @@ def _default_output_dir() -> Path | None:
 
 
 def build_video_page(window) -> Gtk.Widget:
-    return VideoPage(window).widget
+    page = VideoPage(window)
+    page.widget._trex_page = page  # lets window.open_with_file reach the page
+    return page.widget

@@ -424,4 +424,6 @@ def _default_output_dir() -> Path | None:
 
 
 def build_pdf_page(window) -> Gtk.Widget:
-    return PdfPage(window).widget
+    page = PdfPage(window)
+    page.widget._trex_page = page  # lets window.open_with_file reach the page
+    return page.widget

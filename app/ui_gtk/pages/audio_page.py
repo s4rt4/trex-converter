@@ -346,4 +346,6 @@ def _default_output_dir() -> Path | None:
 
 
 def build_audio_page(window) -> Gtk.Widget:
-    return AudioPage(window).widget
+    page = AudioPage(window)
+    page.widget._trex_page = page  # lets window.open_with_file reach the page
+    return page.widget

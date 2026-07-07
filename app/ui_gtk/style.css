@@ -232,3 +232,21 @@ viewswitcher button:checked image {
   min-width: 13px;
   min-height: 13px;
 }
+
+/* Dashboard quick-convert drop card + destination shortcut chips. */
+.quick-drop {
+  padding: 26px 18px;
+}
+
+.quick-drop image {
+  color: @accent_color;
+}
+
+.quick-action {
+  padding: 10px 14px;
+  transition: box-shadow 150ms ease;
+}
+
+.quick-action:hover {
+  box-shadow: 0 1px 8px alpha(black, 0.12);
+}

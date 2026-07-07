@@ -81,6 +81,10 @@ class DropZone(Gtk.Box):
     def path(self) -> Path | None:
         return self._path
 
+    def set_path(self, path: Path | None) -> None:
+        """Programmatically load a file, as if it had been dropped."""
+        self._set_path(path)
+
     # -- empty state -------------------------------------------------------
 
     def _render_empty(self) -> None:

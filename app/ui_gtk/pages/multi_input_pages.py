@@ -348,7 +348,9 @@ def _default_output_dir() -> Path | None:
 
 def _make_builder(page_cls):
     def build(window) -> Gtk.Widget:
-        return page_cls(window).widget
+        page = page_cls(window)
+        page.widget._trex_page = page  # lets window.open_with_file reach it
+        return page.widget
 
     return build
 

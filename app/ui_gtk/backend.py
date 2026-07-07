@@ -287,6 +287,20 @@ class QueueController:
             return []
         return [self._freeze(t) for t in self._queue.all()]
 
+    def recent_tasks(self, limit: int = 6) -> list[Task]:
+        """Most recently updated tasks from the persistent history.
+
+        Same thread-safety story as count_by_period: each call opens its
+        own sqlite connection. Empty when the queue is non-persistent.
+        """
+        repository = getattr(self._queue, "_repository", None)
+        if repository is None:
+            return []
+        try:
+            return repository.list()[:limit]
+        except Exception:
+            return []
+
     def count_by_period(self, granularity: str) -> list[tuple[str, int]]:
         """Task counts bucketed by ``granularity`` for the activity chart.
 

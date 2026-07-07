@@ -555,4 +555,6 @@ def _default_output_dir() -> Path | None:
 
 def build_image_page(window) -> Gtk.Widget:
     """Builder used by the window's destination registry."""
-    return ImagePage(window).widget
+    page = ImagePage(window)
+    page.widget._trex_page = page  # lets window.open_with_file reach the page
+    return page.widget
