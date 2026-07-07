@@ -5,15 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "t-rex-converter"
 dynamic = ["version"]
-description = "Native Debian GUI file converter with engine-based local processing."
+description = "Native GTK4/libadwaita file converter with engine-based local processing."
 readme = "README.md"
 requires-python = ">=3.11"
+# PyGObject/GTK4/libadwaita come from the distro (python3-gobject, gtk4,
+# libadwaita), not pip — only the pip-installable runtime deps are listed.
 dependencies = [
-    "PySide6>=6.6",
     "PyMuPDF>=1.24",
-    "qtawesome>=1.4",
-    "qasync>=0.27",
-    "pdf2docx>=0.5",
+    "psutil>=5.9",
 ]
 
 [project.optional-dependencies]
@@ -23,7 +22,7 @@ dev = [
 ]
 
 [project.scripts]
-t-rex-converter = "app.main:main"
+t-rex-converter = "app.gtk_main:main"
 
 [tool.setuptools.dynamic]
 version = {attr = "app.__version__"}

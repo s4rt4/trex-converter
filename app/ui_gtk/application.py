@@ -112,7 +112,8 @@ class TrexApplication(Adw.Application):
             "a single front-end over best-in-class command-line engines.",
             website="https://github.com/s4rt4/trex-converter",
             issue_url="https://github.com/s4rt4/trex-converter/issues",
-            license_type=Gtk.License.GPL_3_0,
+            # MIT, per packaging/debian/copyright — the repo's declared license.
+            license_type=Gtk.License.MIT_X11,
         )
         about.set_copyright("© s4rt4")
         # The conversion engines this app drives (feature-map §D).

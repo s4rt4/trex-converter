@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# System launcher for the GTK4 T-Rex Converter (installed by the RPM).
+# The app lives under /usr/share/t-rex-converter as a plain package tree;
+# asset lookup (app/utils/paths.py) already knows this layout.
+exec env PYTHONPATH=/usr/share/t-rex-converter /usr/bin/python3 -m app.gtk_main "$@"
