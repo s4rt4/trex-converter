@@ -43,7 +43,7 @@ Exec=env PYTHONPATH=$REPO_ROOT $PYTHON -m app.gtk_main
 Path=$REPO_ROOT
 Icon=$APP_ID
 Terminal=false
-Categories=Utility;AudioVideo;Graphics;
+Categories=Utility;
 StartupWMClass=$APP_ID
 EOF
 

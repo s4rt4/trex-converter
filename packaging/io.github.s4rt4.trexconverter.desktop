@@ -5,5 +5,5 @@ Comment=Convert media, images, documents, and PDFs locally
 Exec=t-rex-converter
 Icon=io.github.s4rt4.trexconverter
 Terminal=false
-Categories=Utility;AudioVideo;Graphics;
+Categories=Utility;
 StartupWMClass=io.github.s4rt4.trexconverter
