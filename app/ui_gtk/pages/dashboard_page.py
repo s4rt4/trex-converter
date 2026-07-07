@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import subprocess
+import threading
 from shutil import which
 
 from gi.repository import Adw, Gdk, GLib, Gtk, Pango, PangoCairo
@@ -62,6 +63,9 @@ class DashboardPage:
         self._values: dict[str, Gtk.Label] = {}
         self._anim: dict[str, int] = {}  # key -> GLib timeout source id
         self._status: dict[str, Gtk.Label] = {}
+        # Bumped per refresh and on destroy so a slow `ffmpeg -hwaccels`
+        # probe can't write into stale (or disposed) rows.
+        self._hwaccel_generation = 0
 
         self._chart_buckets: list[tuple[str, int]] = []
         self._granularity = GRANULARITIES[0][1]
@@ -72,6 +76,7 @@ class DashboardPage:
         page.add(self._build_engines_group())
 
         self.widget = page
+        self.widget.connect("destroy", self._on_destroy)
         self.refresh_engines()
         self._refresh_chart()
         if hasattr(window, "register_dashboard"):
@@ -279,11 +284,32 @@ class DashboardPage:
             status.remove_css_class("engine-missing")
             status.add_css_class("engine-ok" if available else "engine-missing")
 
-        accels = _detect_hwaccels()
-        if accels:
-            self._hwaccel_row.set_subtitle(", ".join(accels))
-        else:
-            self._hwaccel_row.set_subtitle("None detected (or ffmpeg missing)")
+        # `ffmpeg -hwaccels` spawns a subprocess (up to 3 s on a slow or
+        # broken install) — never on the GTK main thread: the dashboard is
+        # the default page, so this used to block the window from mapping.
+        self._hwaccel_row.set_subtitle("Checking…")
+        self._hwaccel_generation += 1
+        generation = self._hwaccel_generation
+
+        def worker() -> None:
+            accels = _detect_hwaccels()
+            GLib.idle_add(self._apply_hwaccels, generation, accels)
+
+        threading.Thread(target=worker, name="hwaccel-probe", daemon=True).start()
+
+    def _apply_hwaccels(self, generation: int, accels: list[str]) -> bool:
+        if generation == self._hwaccel_generation:
+            if accels:
+                self._hwaccel_row.set_subtitle(", ".join(accels))
+            else:
+                self._hwaccel_row.set_subtitle("None detected (or ffmpeg missing)")
+        return False  # one-shot idle callback
+
+    def _on_destroy(self, _widget) -> None:
+        self._hwaccel_generation += 1
+        for source_id in self._anim.values():
+            GLib.source_remove(source_id)
+        self._anim.clear()
 
     # -- counts (wired to the queue later) --------------------------------
 

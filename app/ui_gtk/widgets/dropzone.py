@@ -59,8 +59,11 @@ class DropZone(Gtk.Box):
         self._path: Path | None = None
         self._details: str | None = None
         # Bumped on every path change so a slow probe for a replaced file
-        # can't overwrite the metadata of the file now shown.
+        # can't overwrite the metadata of the file now shown. Also bumped
+        # on destroy, so a probe finishing after teardown (ffprobe can take
+        # seconds) can't call into disposed widgets.
         self._probe_generation = 0
+        self.connect("destroy", self._on_destroy)
 
         drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
         drop.connect("drop", self._on_drop)
@@ -282,6 +285,9 @@ class DropZone(Gtk.Box):
                 GLib.idle_add(self._apply_probe, generation, details)
 
         threading.Thread(target=worker, name="dropzone-probe", daemon=True).start()
+
+    def _on_destroy(self, _widget) -> None:
+        self._probe_generation += 1
 
     def _apply_probe(self, generation: int, details: str) -> bool:
         # Discard results for a file that's already been replaced/removed.

@@ -257,7 +257,9 @@ class TrexWindow(Adw.ApplicationWindow):
         button.set_tooltip_text("Toggle light / dark theme")
         button.connect("clicked", self._on_theme_toggle)
         self._theme_button = button
-        self._style_manager.connect(
+        # Keep the handler id: the StyleManager is process-global, so this
+        # must be disconnected in teardown() or it outlives the window.
+        self._style_handler = self._style_manager.connect(
             "notify::dark", lambda *_: self._update_theme_icon()
         )
         self._update_theme_icon()
@@ -329,6 +331,17 @@ class TrexWindow(Adw.ApplicationWindow):
         # On a collapsed split view, drill into the content pane.
         if self._split.get_collapsed():
             self._split.set_show_content(True)
+
+    def teardown(self) -> None:
+        """Detach timers and global-signal handlers before shutdown.
+
+        Without this the resource-monitor tick keeps firing into disposed
+        widgets while GApplication drains the main context after quit.
+        """
+        self._resource_monitor.stop()
+        if getattr(self, "_style_handler", None) is not None:
+            self._style_manager.disconnect(self._style_handler)
+            self._style_handler = None
 
     def show_toast(self, text: str) -> None:
         toast = Adw.Toast.new(text)

@@ -73,6 +73,8 @@ class TrexApplication(Adw.Application):
         self._window.attach_queue(self._queue)
 
     def do_shutdown(self) -> None:
+        if self._window is not None:
+            self._window.teardown()
         queue = getattr(self, "_queue", None)
         if queue is not None:
             queue.shutdown()

@@ -2,9 +2,11 @@
 
 Replaces the placeholder Queue page. Shows one row per task with its
 input → output, engine, status, and a progress bar, plus Cancel / Retry /
-Details actions (feature-map §D). Rebuilt wholesale whenever the
-:class:`~app.ui_gtk.backend.QueueController` reports a change — task
-counts are small and rebuilding keeps the state trivially correct.
+Details actions (feature-map §D). Rows are updated in place when the
+task set is unchanged (the hot path: progress ticks arrive twice a
+second while converting) and only rebuilt when tasks appear or vanish —
+a wholesale rebuild re-decoded every thumbnail from disk and recreated
+the action buttons under the pointer, losing clicks.
 """
 
 from __future__ import annotations
@@ -41,20 +43,177 @@ _STATUS_LABEL = {
 }
 
 
-def _load_thumbnail(path: Path) -> Gdk.Texture | None:
-    """A small thumbnail for raster image inputs; None for everything else."""
-    if path.suffix.lower().lstrip(".") not in _IMAGE_EXTS:
-        return None
-    try:
-        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), 72, 72, True)
-    except GLib.Error:
-        return None
-    return Gdk.Texture.new_for_pixbuf(pixbuf)
+class _ThumbnailCache:
+    """Decoded thumbnails keyed by path; one disk decode per input file."""
+
+    def __init__(self) -> None:
+        self._by_path: dict[str, Gdk.Texture | None] = {}
+
+    def get(self, path: Path) -> Gdk.Texture | None:
+        key = str(path)
+        if key not in self._by_path:
+            self._by_path[key] = self._load(path)
+        return self._by_path[key]
+
+    @staticmethod
+    def _load(path: Path) -> Gdk.Texture | None:
+        """A small thumbnail for raster image inputs; None otherwise."""
+        if path.suffix.lower().lstrip(".") not in _IMAGE_EXTS:
+            return None
+        try:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), 72, 72, True)
+        except GLib.Error:
+            return None
+        return Gdk.Texture.new_for_pixbuf(pixbuf)
+
+
+class _TaskRow(Gtk.ListBoxRow):
+    """One queue entry; ``update()`` mutates it in place on progress ticks."""
+
+    def __init__(self, view: "QueueView", task: Task) -> None:
+        super().__init__()
+        self.set_activatable(False)
+        self._view = view
+        self.task = task
+        self._shown_status: TaskStatus | None = None
+        self._shown_retry: bool | None = None
+
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+
+        box.append(self._build_thumb(task))
+
+        info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        info.set_hexpand(True)
+        info.set_valign(Gtk.Align.CENTER)
+
+        self._title = Gtk.Label(
+            label=f"{task.input_path.name}  →  {task.output_path.name}", xalign=0.0
+        )
+        self._title.add_css_class("heading")
+        self._title.set_ellipsize(3)  # Pango.EllipsizeMode.END
+        info.append(self._title)
+
+        self._meta = Gtk.Label(xalign=0.0)
+        self._meta.add_css_class("caption")
+        self._meta.add_css_class("dim-label")
+        self._meta.set_ellipsize(3)
+        info.append(self._meta)
+
+        self._bar = Gtk.ProgressBar()
+        self._bar.add_css_class("queue-progress")
+        info.append(self._bar)
+
+        box.append(info)
+
+        self._pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self._pill.set_valign(Gtk.Align.CENTER)
+        self._pill.add_css_class("status-pill")
+        self._spinner = Gtk.Spinner()
+        self._pill.append(self._spinner)
+        self._pill_label = Gtk.Label()
+        self._pill_label.add_css_class("caption-heading")
+        self._pill.append(self._pill_label)
+        box.append(self._pill)
+
+        self._actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self._actions.set_valign(Gtk.Align.CENTER)
+        box.append(self._actions)
+
+        self.set_child(box)
+        self.update(task)
+
+    def _build_thumb(self, task: Task) -> Gtk.Widget:
+        tile = Gtk.Box()
+        tile.add_css_class("queue-thumb")
+        tile.set_overflow(Gtk.Overflow.HIDDEN)
+        tile.set_size_request(36, 36)
+        tile.set_valign(Gtk.Align.CENTER)
+        tile.set_halign(Gtk.Align.CENTER)
+
+        texture = self._view.thumbnails.get(task.input_path)
+        if texture is not None:
+            picture = Gtk.Picture.new_for_paintable(texture)
+            picture.set_content_fit(Gtk.ContentFit.COVER)
+            picture.set_size_request(36, 36)
+            tile.append(picture)
+        else:
+            family = _FAMILY_ICON.get(task.format_in.lower(), "document")
+            image = Gtk.Image.new_from_icon_name(icon_name(family))
+            image.set_pixel_size(18)
+            image.set_hexpand(True)
+            image.set_vexpand(True)
+            tile.append(image)
+        return tile
+
+    def update(self, task: Task) -> None:
+        self.task = task
+        running = task.status == TaskStatus.RUNNING
+
+        self._meta.set_label(self._meta_text(task))
+        self._bar.set_visible(running)
+        if running:
+            self._bar.set_fraction(task.progress)
+
+        if task.status != self._shown_status:
+            if self._shown_status is not None:
+                self._pill.remove_css_class(
+                    _STATUS_CSS.get(self._shown_status, "status-pending")
+                )
+            self._pill.add_css_class(_STATUS_CSS.get(task.status, "status-pending"))
+            self._pill_label.set_label(
+                _STATUS_LABEL.get(task.status, str(task.status))
+            )
+            self._spinner.set_visible(running)
+            self._spinner.set_spinning(running)
+
+        # Rebuild the buttons only when the applicable set changes, so a
+        # click can't land on a widget that was just destroyed underneath.
+        retry = task.can_retry()
+        if task.status != self._shown_status or retry != self._shown_retry:
+            child = self._actions.get_first_child()
+            while child is not None:
+                self._actions.remove(child)
+                child = self._actions.get_first_child()
+            if task.status in (TaskStatus.PENDING, TaskStatus.RUNNING):
+                self._actions.append(
+                    self._button("Cancel", self._view._on_cancel, destructive=True)
+                )
+            if retry:
+                self._actions.append(self._button("Retry", self._view._on_retry))
+            self._actions.append(self._button("Details", self._view._on_details))
+
+        self._shown_status = task.status
+        self._shown_retry = retry
+
+    @staticmethod
+    def _meta_text(task: Task) -> str:
+        parts = [task.engine, _STATUS_LABEL.get(task.status, str(task.status))]
+        if task.status == TaskStatus.RUNNING and task.progress > 0:
+            parts.append(f"{int(task.progress * 100)}%")
+        if task.status == TaskStatus.FAILED and task.error:
+            parts.append(task.error)
+        return " · ".join(parts)
+
+    def _button(self, label, handler, *, destructive=False) -> Gtk.Button:
+        button = Gtk.Button(label=label)
+        button.add_css_class("flat")
+        if destructive:
+            button.add_css_class("destructive-action")
+        button.set_valign(Gtk.Align.CENTER)
+        # self.task, not a bound task: the row outlives many task snapshots.
+        button.connect("clicked", lambda _b: handler(self.task))
+        return button
 
 
 class QueueView:
     def __init__(self, window) -> None:
         self._window = window
+        self.thumbnails = _ThumbnailCache()
+        self._rows: dict[str, _TaskRow] = {}
 
         self._empty = Adw.StatusPage(
             title="Queue is empty",
@@ -83,129 +242,33 @@ class QueueView:
     # -- updates -----------------------------------------------------------
 
     def set_tasks(self, tasks: list[Task]) -> None:
-        self._clear()
         if not tasks:
+            self._clear()
             self.widget.set_visible_child_name("empty")
             return
         self.widget.set_visible_child_name("list")
-        # Newest first.
-        for task in reversed(tasks):
-            self._list.append(self._make_row(task))
+
+        ordered = list(reversed(tasks))  # newest first
+        if [t.id for t in ordered] == list(self._rows):
+            # Same task set: the hot path — update rows in place.
+            for task in ordered:
+                self._rows[task.id].update(task)
+            return
+
+        # Task set changed (add/remove/reorder): rebuild the list, reusing
+        # nothing but the thumbnail cache — this is the rare path.
+        self._clear()
+        for task in ordered:
+            row = _TaskRow(self, task)
+            self._rows[task.id] = row
+            self._list.append(row)
 
     def _clear(self) -> None:
+        self._rows.clear()
         child = self._list.get_first_child()
         while child is not None:
             self._list.remove(child)
             child = self._list.get_first_child()
-
-    def _make_row(self, task: Task) -> Gtk.Widget:
-        row = Gtk.ListBoxRow()
-        row.set_activatable(False)
-
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        box.set_margin_top(10)
-        box.set_margin_bottom(10)
-        box.set_margin_start(12)
-        box.set_margin_end(12)
-
-        box.append(self._thumb(task))
-
-        info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        info.set_hexpand(True)
-        info.set_valign(Gtk.Align.CENTER)
-
-        title = Gtk.Label(
-            label=f"{task.input_path.name}  →  {task.output_path.name}", xalign=0.0
-        )
-        title.add_css_class("heading")
-        title.set_ellipsize(3)  # Pango.EllipsizeMode.END
-        info.append(title)
-
-        meta = Gtk.Label(label=self._meta_text(task), xalign=0.0)
-        meta.add_css_class("caption")
-        meta.add_css_class("dim-label")
-        meta.set_ellipsize(3)
-        info.append(meta)
-
-        if task.status == TaskStatus.RUNNING:
-            bar = Gtk.ProgressBar()
-            bar.set_fraction(task.progress)
-            bar.add_css_class("queue-progress")
-            info.append(bar)
-
-        box.append(info)
-        box.append(self._status_pill(task))
-        box.append(self._actions(task))
-
-        row.set_child(box)
-        return row
-
-    def _thumb(self, task: Task) -> Gtk.Widget:
-        tile = Gtk.Box()
-        tile.add_css_class("queue-thumb")
-        tile.set_overflow(Gtk.Overflow.HIDDEN)
-        tile.set_size_request(36, 36)
-        tile.set_valign(Gtk.Align.CENTER)
-        tile.set_halign(Gtk.Align.CENTER)
-
-        texture = _load_thumbnail(task.input_path)
-        if texture is not None:
-            picture = Gtk.Picture.new_for_paintable(texture)
-            picture.set_content_fit(Gtk.ContentFit.COVER)
-            picture.set_size_request(36, 36)
-            tile.append(picture)
-        else:
-            family = _FAMILY_ICON.get(task.format_in.lower(), "document")
-            image = Gtk.Image.new_from_icon_name(icon_name(family))
-            image.set_pixel_size(18)
-            image.set_hexpand(True)
-            image.set_vexpand(True)
-            tile.append(image)
-        return tile
-
-    def _meta_text(self, task: Task) -> str:
-        parts = [task.engine, _STATUS_LABEL.get(task.status, str(task.status))]
-        if task.status == TaskStatus.RUNNING and task.progress > 0:
-            parts.append(f"{int(task.progress * 100)}%")
-        if task.status == TaskStatus.FAILED and task.error:
-            parts.append(task.error)
-        return " · ".join(parts)
-
-    def _status_pill(self, task: Task) -> Gtk.Widget:
-        pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        pill.set_valign(Gtk.Align.CENTER)
-        pill.add_css_class("status-pill")
-        pill.add_css_class(_STATUS_CSS.get(task.status, "status-pending"))
-
-        if task.status == TaskStatus.RUNNING:
-            spinner = Gtk.Spinner()
-            spinner.set_spinning(True)
-            pill.append(spinner)
-
-        label = Gtk.Label(label=_STATUS_LABEL.get(task.status, str(task.status)))
-        label.add_css_class("caption-heading")
-        pill.append(label)
-        return pill
-
-    def _actions(self, task: Task) -> Gtk.Widget:
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        box.set_valign(Gtk.Align.CENTER)
-
-        if task.status in (TaskStatus.PENDING, TaskStatus.RUNNING):
-            box.append(self._button("Cancel", task, self._on_cancel, destructive=True))
-        if task.can_retry():
-            box.append(self._button("Retry", task, self._on_retry))
-        box.append(self._button("Details", task, self._on_details))
-        return box
-
-    def _button(self, label, task, handler, *, destructive=False) -> Gtk.Button:
-        button = Gtk.Button(label=label)
-        button.add_css_class("flat")
-        if destructive:
-            button.add_css_class("destructive-action")
-        button.set_valign(Gtk.Align.CENTER)
-        button.connect("clicked", lambda _b, t=task: handler(t))
-        return button
 
     # -- actions -----------------------------------------------------------
 

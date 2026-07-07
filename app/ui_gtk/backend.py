@@ -18,6 +18,7 @@ Two responsibilities:
 from __future__ import annotations
 
 import asyncio
+import copy
 import threading
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
@@ -26,7 +27,7 @@ from pathlib import Path
 from gi.repository import GLib
 
 from app.core.runner import create_default_queue
-from app.core.task import Task
+from app.core.task import Task, TaskStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +169,8 @@ class QueueController:
         self._on_change = on_change
         self._queue_factory = queue_factory
         self._queue = None
+        self._closed = False
+        self._poll_id: int | None = None
         self._startup_error: BaseException | None = None
         self._loop = asyncio.new_event_loop()
         self._ready = threading.Event()
@@ -201,15 +204,56 @@ class QueueController:
 
     # -- loop-thread → GTK-thread -----------------------------------------
 
+    @staticmethod
+    def _freeze(task: Task) -> Task:
+        """A shallow copy the GTK thread can read without torn state.
+
+        The queue mutates Task objects in place on the loop thread
+        (status/progress/error/log); handing the UI copies keeps a row
+        from rendering half of one state and half of another.
+        """
+        frozen = copy.copy(task)
+        frozen.log = list(task.log)
+        return frozen
+
     def _on_task_event(self, _task: Task) -> None:
         # Runs on the loop thread. Snapshot here (cheap, GIL-safe) and hand
         # the list to the GTK thread; never touch widgets from here.
-        snapshot = list(self._queue.all())
+        if self._closed:
+            return
+        snapshot = [self._freeze(t) for t in self._queue.all()]
         GLib.idle_add(self._deliver, snapshot)
 
     def _deliver(self, snapshot: list[Task]) -> bool:
+        if self._closed:
+            # Shutdown emits cancellation events; by the time the idle
+            # callback runs the window may already be gone.
+            return False
         self._on_change(snapshot)
+        self._ensure_poller(snapshot)
         return False  # one-shot idle callback
+
+    # -- progress polling ---------------------------------------------------
+    # Engines write task.progress continuously but the queue only emits on
+    # status transitions, so while anything is RUNNING we poll a fresh
+    # snapshot every half second to keep progress bars moving.
+
+    def _ensure_poller(self, tasks: list[Task]) -> None:
+        if self._poll_id is None and any(
+            t.status == TaskStatus.RUNNING for t in tasks
+        ):
+            self._poll_id = GLib.timeout_add(500, self._on_poll)
+
+    def _on_poll(self) -> bool:
+        if self._closed or self._queue is None:
+            self._poll_id = None
+            return False
+        snapshot = self.snapshot()
+        self._on_change(snapshot)
+        if not any(t.status == TaskStatus.RUNNING for t in snapshot):
+            self._poll_id = None
+            return False
+        return True
 
     # -- GTK-thread → loop-thread -----------------------------------------
 
@@ -229,10 +273,10 @@ class QueueController:
             pass  # not in a retryable state anymore
 
     def snapshot(self) -> list[Task]:
-        """Current tasks (GIL-safe read of the queue's dict snapshot)."""
+        """Current tasks, as copies safe to read from the GTK thread."""
         if self._queue is None:
             return []
-        return list(self._queue.all())
+        return [self._freeze(t) for t in self._queue.all()]
 
     def count_by_period(self, granularity: str) -> list[tuple[str, int]]:
         """Task counts bucketed by ``granularity`` for the activity chart.
@@ -251,6 +295,7 @@ class QueueController:
 
     def shutdown(self) -> None:
         """Best-effort graceful stop: close the queue and stop the loop."""
+        self._closed = True  # stops event delivery and the progress poller
         if self._queue is not None:
             future = asyncio.run_coroutine_threadsafe(
                 self._queue.close(), self._loop
