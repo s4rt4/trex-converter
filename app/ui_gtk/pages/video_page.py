@@ -84,7 +84,7 @@ class VideoPage:
         )
         self.destination = DestinationRow(initial=_default_output_dir())
         self.audio_bitrate = FormatPicker(
-            AUDIO_BITRATES, default=DEFAULT_BITRATE,
+            AUDIO_BITRATES, default=_default_bitrate(settings),
             title="Audio bitrate", uppercase=False,
         )
         output_group = Adw.PreferencesGroup(title="Output")
@@ -381,7 +381,9 @@ class VideoPage:
         loading a preset never leaves earlier configuration active.
         """
         self.format_picker.set_format(str(payload.get("format_out", DEFAULT_FORMAT)))
-        self.audio_bitrate.set_format(str(payload.get("bitrate", DEFAULT_BITRATE)))
+        self.audio_bitrate.set_format(str(
+            payload.get("bitrate", _default_bitrate(get_settings()))
+        ))
 
         trim_keys = {"trim_start", "trim_end", "stream_copy"}
         self.op_trim.row.set_enable_expansion(bool(trim_keys & payload.keys()))
@@ -487,6 +489,12 @@ class VideoPage:
             output_dir=self.destination.directory,
             format_out=fmt, options=options, switch_to_queue=switch,
         )
+
+
+def _default_bitrate(settings) -> str:
+    """The Settings default when it's one of the offered chips, else 192k."""
+    value = settings.default_audio_bitrate
+    return value if value in AUDIO_BITRATES else DEFAULT_BITRATE
 
 
 def _as_int(value, fallback: int) -> int:

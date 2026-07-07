@@ -31,10 +31,21 @@ def migrate_legacy_config() -> None:
     if legacy_settings.is_file() and not SETTINGS_PATH.exists():
         shutil.move(str(legacy_settings), str(SETTINGS_PATH))
 
+    # Merge presets per file: an all-or-nothing move would strand every
+    # legacy preset the moment anything creates the new presets dir first
+    # (e.g. saving one preset in a fresh install before migration ran).
     legacy_presets = _LEGACY_CONFIG_DIR / "presets"
     new_presets = CONFIG_DIR / "presets"
-    if legacy_presets.is_dir() and not new_presets.exists():
-        shutil.move(str(legacy_presets), str(new_presets))
+    if legacy_presets.is_dir():
+        for kind_dir in legacy_presets.iterdir():
+            if not kind_dir.is_dir():
+                continue
+            target_dir = new_presets / kind_dir.name
+            target_dir.mkdir(parents=True, exist_ok=True)
+            for preset in kind_dir.glob("*.json"):
+                target = target_dir / preset.name
+                if not target.exists():
+                    shutil.move(str(preset), str(target))
 
 
 @dataclass(slots=True)

@@ -12,13 +12,20 @@ _NAME_OK = re.compile(r"^[A-Za-z0-9 _\-]{1,40}$")
 
 
 def list_presets(kind: str, base: Path = PRESETS_DIR) -> list[str]:
-    """Return preset names for the given page kind, sorted alphabetically."""
+    """Return preset names for the given page kind, sorted alphabetically.
+
+    Only names that load_preset/delete_preset will accept are listed —
+    a hand-copied file whose stem fails _safe_name would otherwise show
+    up but raise on every Load/Delete.
+    """
     folder = base / kind
     if not folder.is_dir():
         return []
     names: list[str] = []
     for path in folder.iterdir():
         if not path.is_file() or path.suffix != ".json":
+            continue
+        if not _NAME_OK.match(path.stem):
             continue
         names.append(path.stem)
     return sorted(names)

@@ -166,8 +166,23 @@ class SettingsDialog(Adw.Dialog):
         else:
             ocr_value = str(self.ocr_language.get_value())
 
+        # Pages silently fall back to "same folder as input" when this dir
+        # doesn't exist, so create it now (and fail loudly if we can't)
+        # rather than letting a typo or a not-yet-created folder be a no-op.
+        output_dir = self.output_dir.get_text().strip()
+        if output_dir:
+            resolved = Path(output_dir).expanduser()
+            try:
+                resolved.mkdir(parents=True, exist_ok=True)
+            except OSError as error:
+                self._window.show_toast(
+                    f"Default output folder is not usable: {error}"
+                )
+                return
+            output_dir = str(resolved)
+
         new_settings = Settings(
-            output_dir=self.output_dir.get_text().strip(),
+            output_dir=output_dir,
             max_concurrency=int(self.concurrency.get_value()),
             default_image_quality=int(self.image_quality.get_value()),
             default_pdf_dpi=int(self.pdf_dpi.get_value()),

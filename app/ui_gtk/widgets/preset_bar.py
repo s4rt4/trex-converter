@@ -78,7 +78,11 @@ class PresetBar(Gtk.Box):
         name = self._selected_name()
         if name is None:
             return
-        payload = presets.load_preset(self._kind, name)
+        try:
+            payload = presets.load_preset(self._kind, name)
+        except ValueError as error:
+            self._toast(str(error))
+            return
         if not payload:
             self._toast("Could not read that preset.")
             return
@@ -134,6 +138,11 @@ class PresetBar(Gtk.Box):
     def _on_delete_response(self, _dialog, response: str, name: str) -> None:
         if response != "delete":
             return
-        if presets.delete_preset(self._kind, name):
+        try:
+            deleted = presets.delete_preset(self._kind, name)
+        except ValueError as error:
+            self._toast(str(error))
+            return
+        if deleted:
             self._refresh()
             self._toast(f"Deleted preset “{name}”")
