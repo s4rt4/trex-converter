@@ -1,82 +1,101 @@
 # T-Rex Converter
 
-T-Rex Converter adalah aplikasi GUI native Debian untuk konversi file lokal. Semua pemrosesan berjalan lokal lewat engine yang membungkus binary sistem (ffmpeg, ImageMagick, LibreOffice, dll.). Arsitekturnya berbasis task queue async, registry format→engine, dependency checker, dan UI PySide6.
+A native **GTK4 / libadwaita** app that converts images, video, audio, documents,
+PDFs, subtitles, ebooks, and archives — entirely on your machine. It is a single
+front-end over best-in-class command-line engines (FFmpeg, ImageMagick,
+LibreOffice, Pandoc, Tesseract, PyMuPDF/qpdf, Inkscape, ExifTool, and more),
+with an async task queue, presets, and bilingual built-in help.
 
-## Status
+![T-Rex Converter dashboard](screenshots/dashboard.png)
 
-Current version: `1.0.5`
+## Highlights
 
-Implemented:
-- Core task model dan status lifecycle.
-- Queue in-memory async dengan concurrency limit, cancel, retry, dan event callback.
-- Dependency checker berbasis `PATH`.
-- Registry untuk routing format ke engine.
-- Tesseract OCR engine: image (png/jpg/jpeg/tif/tiff/bmp) DAN PDF input → searchable PDF / TXT / hOCR / TSV dengan pemilih bahasa, PSM, OEM, render DPI 72–600 (default 300), dan auto-rotate via OSD pre-pass.
-- LibreOffice document engine dengan format matrix penuh: text docs ↔ DOCX/ODT/RTF/HTML/EPUB/TXT/PDF, spreadsheets ↔ XLSX/ODS/CSV/HTML/PDF, presentations ↔ PPTX/ODP/PDF. Plus PDF/A archival output, password-protected PDF export (user/owner), dan slide rendering (presentation → folder PNG/JPG dengan DPI configurable).
-- Subtitle engine Python-pure: SRT ↔ VTT ↔ ASS round-trip dengan time shift; ASS parser handle Format header detection, Dialogue rows, escape `\N`, dan Comment skip.
-- Archive engine Python-pure (stdlib `zipfile` + `tarfile`): extract zip/tar/tgz/tbz/txz/gz/bz2/xz → folder dengan path-traversal guard, plus compress folder → zip/tar/tgz/tbz/txz.
-- QR / Barcode engine: `qrencode` (txt → png/svg dengan size/margin/ECC L-M-Q-H) + `zbarimg` (image → txt, `--raw`).
-- Settings page dengan persisten JSON: default output folder, concurrency, image quality, PDF DPI.
-- FFmpeg engine via `asyncio.create_subprocess_exec` dengan progress parser, cancel, trim (start/end), resolution preset 4K/1440p/1080p/720p/480p/360p, compress (CRF + libx264 preset), rotate, flip H/V, free crop, speed change 0.5x–2.0x, watermark teks (drawtext, gravity 9-arah + opacity), reverse video (`reverse`+`areverse`), logo overlay watermark via `-filter_complex` dengan 9-arah + scale + opacity, GIF creator (palettegen+paletteuse), animated WebP (libwebp+loop), contact sheet ke PNG/JPG (select+tile), single-frame still, dan subtitle burn-in (`subtitles=`/`ass=` filter).
-- Audio module: full audio↔audio matrix (mp3/wav/aac/flac/m4a/opus/ogg) plus video→audio extract; trim, fade-in/out, gain ±20 dB, EBU R128 loudness normalize, vocal remove (center-channel cancel), channel down-mix, sample-rate convert, dan ID3 tag editor (title/artist/album/year/genre/track).
-- ImageMagick engine lengkap dengan transform (rotate/flip/flop/trim/crop/aspect crop), resize modes (dimension/longest-edge/percent/megapixel), fit-to-canvas dengan letterbox + background color, color (grayscale/sepia/negate/normalize/brightness/contrast/gamma), filter (blur/sharpen/denoise/vignette), border & frame, text watermark, density, dan ICO multi-resolution.
-- PDF engine via PyMuPDF + qpdf: render halaman ke PNG/JPG, ekstrak ke TXT/HTML, operasi PDF→PDF (extract pages, reorder, rotate, compress, repair via qpdf, encrypt/decrypt AES-256, strip/edit metadata, watermark teks/gambar, page numbering / Bates dengan template `{n}`/`{total}`/`{page}`, redact via search-and-apply), plus operasi pdf→folder (split, extract embedded images, extract embedded attachments).
-- Pandoc engine untuk konversi dokumen markup: markdown/rst/latex/org/html/docx/odt/epub/fb2 ↔ satu sama lain plus output `txt` (plain writer).
-- Inkscape engine untuk vektor: SVG → PNG/PDF/EPS/PS/EMF/WMF/DXF, PDF/DXF → SVG, plus bitmap trace (png/jpg/bmp/tif/gif/webp → SVG).
-- ExifTool engine untuk metadata media (image/audio/video/PDF): read, strip, dan edit tag (title/artist/author/subject/description/comment/copyright/keywords).
-- SQLite task repository untuk history dan resume pending/running task.
-- UI skeleton terhubung ke queue: progress bar per task, tombol cancel dan retry.
-- App logo SVG plus hicolor PNG assets untuk integrasi desktop Debian.
-- Tests untuk core queue, registry, dependency, dan base engine behavior.
+- **26 converter destinations** in a sidebar, grouped by media family — from
+  plain image/video/audio conversion to multi-input jobs (video concat, audio
+  mix, image montage, PDF/document/subtitle merge) and utilities (OCR, QR,
+  archives, metadata).
+- **Dashboard as a home base** — drop any file on the quick-convert card and it
+  opens in the right converter automatically; shortcut chips, task history with
+  open-folder buttons, an activity chart, and a live engine-availability panel.
+- **Task queue** — live progress, cancel/retry, per-task details with engine
+  logs, and a persistent history that resumes pending tasks across restarts.
+- **Presets per page**, a persisted light/dark theme toggle, CPU/RAM readout,
+  and built-in help in English and Bahasa Indonesia.
+- **Local-only processing** — nothing ever leaves your machine.
 
-## Development
+## Install (Fedora 41+)
+
+Grab the RPM from the [latest release](https://github.com/s4rt4/trex-converter/releases):
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e ".[dev]"
-pytest
+sudo dnf install ./t-rex-converter-*.noarch.rpm
 ```
 
-Run GUI:
+The conversion engines are *soft* dependencies (`Recommends`) — the app runs
+without them and the Dashboard shows which ones are available. For video/audio
+you also need **ffmpeg**, which is intentionally not auto-installed (Fedora
+ships `ffmpeg-free`; [RPM Fusion](https://rpmfusion.org) ships the full
+`ffmpeg` — pick one):
 
 ```bash
-t-rex-converter
+sudo dnf install ffmpeg-free        # or: ffmpeg (RPM Fusion)
 ```
 
-Atau:
+## What it converts
+
+| Family | Highlights |
+| --- | --- |
+| **Image** | Any↔any across png/jpg/webp/avif/heic/gif/tiff/bmp/ico + resize, crop, color, filters, borders, watermarks, metadata strip; montage; SVG render & bitmap trace |
+| **Video** | mp4/mkv/webm/mov + trim, transform, compress (CRF/target size), watermark/logo, GIF & animated WebP, thumbnail sheets, subtitle burn-in; concat |
+| **Audio** | mp3/wav/flac/m4a/opus/ogg + trim, fade, loudness normalize, vocal remove, ID3 tags; multi-track mix; extract audio from video |
+| **Document** | LibreOffice matrix: docs/sheets/slides ↔ docx/odt/xlsx/pptx/pdf/html/epub…, PDF/A, password-protected PDF, slides → images; merge to PDF |
+| **PDF** | Convert to png/jpg/txt/html/docx/epub; extract/reorder/rotate pages, compress, encrypt/decrypt, watermark, redact, page numbering, split, compare, extract images/attachments |
+| **More** | OCR (searchable PDF/txt/hOCR), ebooks via Pandoc, QR generate/decode, archive extract/compress, media metadata read/strip/edit |
+
+## Run from source
+
+Requires Python ≥ 3.11 with GTK 4.14+ / libadwaita 1.6+ (Fedora:
+`sudo dnf install gtk4 libadwaita python3-gobject python3-pymupdf python3-psutil`).
 
 ```bash
-python -m app.main
+git clone https://github.com/s4rt4/trex-converter.git
+cd trex-converter
+./run-gtk.sh                 # or: PYTHONPATH=. python3 -m app.gtk_main
 ```
 
-Regenerate PNG icon assets from the SVG logo:
+If you use a virtualenv, create it with `--system-site-packages` (or set
+`include-system-site-packages = true` in `pyvenv.cfg`) so the distro's
+PyGObject is visible inside it.
+
+Useful dev scripts:
 
 ```bash
-scripts/generate-icons.sh
+packaging/build-rpm.sh       # build the RPM (artifacts in build/rpm/RPMS)
+packaging/install-dev.sh     # install a dev .desktop entry + icons for GNOME
+scripts/generate-icons.sh    # regenerate PNG icons from the SVG logo
 ```
 
-## Runtime Dependencies
+## Engine dependencies
 
-Engine asli membutuhkan binary sistem sesuai fitur:
-- `ffmpeg`
-- `magick` atau `convert`
-- `libreoffice`
-- `qpdf`
-- `tesseract`
-- `qrencode` (QR generate)
-- `zbarimg` (QR/barcode decode, paket `zbar-tools`)
-- `pandoc` (konversi dokumen markup)
-- `inkscape` (konversi vektor SVG dan bitmap trace)
-- `exiftool` (baca/edit metadata, paket `libimage-exiftool-perl`)
-
-PDF extract membutuhkan dependency Python `PyMuPDF` dari `pyproject.toml`.
-
-Install di Debian/Ubuntu:
+Each feature degrades gracefully when its engine is missing; the Dashboard's
+**Engines** panel shows live availability. Fedora package names:
 
 ```bash
-sudo apt-get update
-sudo apt-get install ffmpeg imagemagick libreoffice qpdf tesseract-ocr qrencode zbar-tools pandoc inkscape libimage-exiftool-perl
+sudo dnf install ImageMagick libreoffice-writer libreoffice-impress \
+    libreoffice-calc qpdf tesseract pandoc qrencode zbar inkscape \
+    potrace perl-Image-ExifTool
 ```
 
-ImageMagick bisa tersedia sebagai `magick` atau `convert`, tergantung versi distro.
+(Debian/Ubuntu equivalents: `imagemagick libreoffice qpdf tesseract-ocr
+pandoc qrencode zbar-tools inkscape potrace libimage-exiftool-perl`.)
+
+## Branches
+
+- **`gtk4`** — the current 2.x line: GTK4/libadwaita UI (this README).
+- **`main`** — the legacy 1.x line: PySide6/Qt UI packaged for Debian
+  (`packaging/build-deb.sh`). The two share the same engine backend but are
+  released separately.
+
+## License
+
+MIT — see `packaging/debian/copyright`.
