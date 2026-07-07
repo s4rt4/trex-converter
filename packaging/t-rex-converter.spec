@@ -1,6 +1,6 @@
 # RPM packaging for the GTK4 front-end. Build with packaging/build-rpm.sh,
-# which supplies %{app_version} from app/__init__.py and the source tarball
-# via git archive.
+# which supplies the app_version macro from app/__init__.py and the source
+# tarball via git archive.
 %{!?app_version: %define app_version 0.0.0}
 
 Name:           t-rex-converter
