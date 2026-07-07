@@ -5,7 +5,7 @@
 
 Name:           t-rex-converter
 Version:        %{app_version}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Convert media, images, documents, and PDFs locally
 License:        MIT
 URL:            https://github.com/s4rt4/trex-converter
@@ -31,7 +31,12 @@ Recommends:     tesseract
 Recommends:     pandoc
 Recommends:     qrencode
 Recommends:     zbar
-Recommends:     libreoffice
+# The specific LibreOffice components the document/slides engines use —
+# NOT the `libreoffice` meta-package, which drags in Base, Firebird, and
+# the Java reporting stack (~25 packages the app never touches).
+Recommends:     libreoffice-writer
+Recommends:     libreoffice-impress
+Recommends:     libreoffice-calc
 Recommends:     inkscape
 Recommends:     potrace
 Recommends:     perl-Image-ExifTool
@@ -77,6 +82,10 @@ done
 %{_datadir}/icons/hicolor/*/apps/io.github.s4rt4.trexconverter.*
 
 %changelog
+* Tue Jul 07 2026 s4rt4 <vinvan83@gmail.com> - 2.0.0-2
+- Recommend the LibreOffice components the engines actually use instead
+  of the meta-package (which pulled Base/Firebird/Java reporting)
+
 * Tue Jul 07 2026 s4rt4 <vinvan83@gmail.com> - 2.0.0-1
 - GTK4/libadwaita rewrite: new shell, 26 converter pages, dashboard with
   quick convert and history, live-progress queue, bilingual help
