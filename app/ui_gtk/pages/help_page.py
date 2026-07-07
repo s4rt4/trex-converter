@@ -128,6 +128,8 @@ class HelpDialog(Adw.Dialog):
         self._rows = []
         for topic in list_topics(self._language):
             row = Adw.ActionRow(title=topic.title)
+            # Doc H1s are content, not markup ("Tips & Tricks" must render).
+            row.set_use_markup(False)
             row.slug = topic.slug  # type: ignore[attr-defined]
             self._listbox.append(row)
             self._rows.append(row)

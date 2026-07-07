@@ -331,7 +331,11 @@ class TrexWindow(Adw.ApplicationWindow):
             self._split.set_show_content(True)
 
     def show_toast(self, text: str) -> None:
-        self._toasts.add_toast(Adw.Toast.new(text))
+        toast = Adw.Toast.new(text)
+        # Toast titles default to Pango markup; callers interpolate preset
+        # names, paths and error text, so treat the title as plain text.
+        toast.set_use_markup(False)
+        self._toasts.add_toast(toast)
 
     # -- queue / backend ---------------------------------------------------
 

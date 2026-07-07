@@ -27,6 +27,8 @@ class DestinationRow:
         self._on_change = on_change
 
         self.row = Adw.ActionRow(title=title)
+        # The subtitle is a filesystem path — never Pango markup ('&' etc.).
+        self.row.set_use_markup(False)
         self.row.set_subtitle(str(initial) if initial else _SAME_AS_INPUT)
 
         button = Gtk.Button(label="Select location")

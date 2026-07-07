@@ -80,6 +80,8 @@ class SingleInputPage:
         if self.INPUT_MODE == "folder":
             group = Adw.PreferencesGroup(title="Source")
             self._folder_row = Adw.ActionRow(title="Source folder")
+            # The subtitle becomes a filesystem path — never Pango markup.
+            self._folder_row.set_use_markup(False)
             self._folder_row.set_subtitle("No folder selected")
             button = Gtk.Button(label="Select folder")
             button.add_css_class("flat")

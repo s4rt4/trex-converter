@@ -238,12 +238,21 @@ class TaskDetailsDialog(Adw.Dialog):
             ("Status", _STATUS_LABEL.get(task.status, str(task.status))),
             ("Progress", f"{int(task.progress * 100)}%"),
         ):
-            row = Adw.ActionRow(title=title, subtitle=value or "—")
+            row = Adw.ActionRow(title=title)
+            # File paths are user data — never Pango markup ('&' etc.).
+            # Disable markup *before* setting the subtitle: the setter
+            # parses immediately and a raw '&' fails (blank row + warning).
+            row.set_use_markup(False)
+            row.set_subtitle(value or "—")
             row.set_subtitle_selectable(True)
             row.set_activatable(False)
             fields.add(row)
         if task.error:
-            error_row = Adw.ActionRow(title="Error", subtitle=task.error)
+            error_row = Adw.ActionRow(title="Error")
+            # Engine errors routinely contain '<', '>', '&' (ffmpeg filters,
+            # command lines) — parsed as markup the row would go blank.
+            error_row.set_use_markup(False)
+            error_row.set_subtitle(task.error)
             error_row.set_subtitle_selectable(True)
             error_row.add_css_class("error")
             fields.add(error_row)
